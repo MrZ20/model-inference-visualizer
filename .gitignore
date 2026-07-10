@@ -1,0 +1,33 @@
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Raw/private inference artifacts
+data/raw/
+data/private/
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+
+# Local logs and temporary artifacts
+*.log
+tmp/
+.cache/

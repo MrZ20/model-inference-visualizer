@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/model-inference-visualizer/trace-event-v1.schema.json",
+  "title": "Inference trace event",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "runId",
+    "timestampNs",
+    "pid",
+    "rank",
+    "phase",
+    "stage",
+    "fidelity",
+    "payload"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "eventId": {"type": "string"},
+    "runId": {"type": "string"},
+    "timestampNs": {"type": "integer"},
+    "wallTime": {"type": "integer"},
+    "pid": {"type": "integer"},
+    "rank": {"type": "string"},
+    "processRole": {"type": "string"},
+    "hostname": {"type": "string"},
+    "phase": {"type": "string"},
+    "logicalStep": {
+      "type": "object",
+      "required": ["kind", "index"],
+      "properties": {
+        "kind": {"type": "string"},
+        "index": {"type": "integer"}
+      }
+    },
+    "stage": {"type": "string"},
+    "fidelity": {
+      "enum": ["EXACT", "SUMMARY", "STRUCTURAL", "SCHEMATIC"]
+    },
+    "payload": {"type": "object"}
+  },
+  "additionalProperties": true
+}

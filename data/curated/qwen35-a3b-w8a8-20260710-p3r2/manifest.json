@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "qwen35-a3b-w8a8-20260710-p3r2",
+  "eventCount": 454,
+  "chapters": {
+    "decode": 184,
+    "init": 216,
+    "prefill": 46,
+    "warmup": 8
+  },
+  "validation": {
+    "errors": 0,
+    "missingStages": []
+  }
+}

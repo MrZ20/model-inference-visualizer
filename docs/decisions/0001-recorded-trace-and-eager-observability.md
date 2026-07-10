@@ -22,4 +22,4 @@
 - 可以稳定采集层内 tensor，而不修改生产源码。
 - eager trace 的数值是真实运行数据，但耗时不能代表 graph 模式性能。
 - baseline 的 graph capture 是真实优化路径，但不提供层内 hook 数值。
-- 融合内核未暴露的数据必须标记为 STRUCTURAL/SCHEMATIC，不得伪造 EXACT。
+- 融合算子的 Python 可见输入输出边界可以采集真实值；未返回的内核内部临时值必须标记为 STRUCTURAL/SCHEMATIC，不得伪造 EXACT。

@@ -16,10 +16,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("events_json", type=Path)
     parser.add_argument("report_json", type=Path)
+    parser.add_argument("--require-detail", action="store_true")
     args = parser.parse_args()
 
     events = json.loads(args.events_json.read_text(encoding="utf-8"))
-    report = validate_events(events)
+    report = validate_events(events, require_detail=args.require_detail)
     args.report_json.parent.mkdir(parents=True, exist_ok=True)
     args.report_json.write_text(
         json.dumps(report, ensure_ascii=False, indent=2),

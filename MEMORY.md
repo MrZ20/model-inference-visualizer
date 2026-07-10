@@ -5,9 +5,9 @@
 ## 1. 当前状态
 
 - 日期：2026-07-10
-- 当前阶段：P2–P4 已完成
-- 当前状态：正式轨迹已下载、脱敏、编译并通过校验
-- 下一阶段门：进入 P5 架构冻结与视觉方向
+- 当前阶段：P2–P4.1 已完成
+- 当前状态：W8A8 融合边界与 TP2 并行补采已下载、脱敏、投影并通过严格校验
+- 下一阶段门：用户验收 P4.1 后进入 P5 架构冻结与视觉方向
 - 当前仓库：`/Users/user/work/MrZ20_1/model-inference-visualizer`
 
 ## 2. 北极星
@@ -55,6 +55,18 @@
 - rank 0 参数清单包含约 17.62B parameter elements，其中约 16.20B 为 int8；TP 两侧存在切分与复制，不能简单相加当作模型精确总参数量。
 - 最终 raw 约 376K、curated 约 720K、web 约 720K；SCP 数据约 1.1M，远低于 10G。
 - 脱敏扫描未发现远端 hostname、IP、`/root` 或 `/vllm-workspace` 绝对路径。
+- P4.1 最终 run ID 为 `qwen35-a3b-w8a8-20260710-p4r3`，退出码 0；采集器内部耗时约 143.24 秒，墙钟约 164.27 秒。
+- P4.1 仍生成相同的 5 个 token 和最终文本，logits top-1 再次与输出完全一致。
+- P4.1 共 1722 个事件；rank 0/1 各 742 个，main/辅助进程 238 个；raw 约 1.5 MB，远端完整 run 约 4.2 MB。
+- layer 3 prefill 的 MoE dispatch 在两个 rank 上均输出 `[40, 2048]` INT8 激活和完整 `[40]` per-token scale；5 token × top-8 experts 对应 40 行。
+- dispatch scale 在两个 rank 上相同，范围约 `0.04035–0.06299`；GMM1+SwiGLU 后的 `[40]` scale 已分化，rank 0 约 `0.00078–0.00923`，rank 1 约 `0.00097–0.05730`。
+- GMM1+SwiGLU 输出为每 rank `[40, 256]` INT8；GMM2 输出为每 rank `[40, 2048]` BF16。
+- QKV projection 的逻辑输出为 9216，每个 rank 的 INT8 权重分片为 `[2048, 4608]`；O projection 每 rank 的本地权重为 `[2048, 2048]`。
+- MoE experts 每 rank 的 W1 INT8 分片为 `[256, 2048, 512]`，W2 INT8 分片为 `[256, 256, 2048]`；router 的 `[256, 2048]` BF16 权重在两 rank 复制。
+- P4.1 生成 50 个 layer 3 并行 span，覆盖 QKV、融合 attention、O projection、MoE router 和 experts 的 5 个推理步 × 2 ranks。
+- 运行配置是 TP=2、EP=false；底层 `get_ep_group()` 的 world size 2 是 MoE 通信复用 TP group，不能解释为独立 EP2。
+- `parallel-summary.json` 包含拓扑、模块分片和配对 span；`moe-quantization.json` 包含 10 个 rank × logical-step 的完整量化链。
+- P4.1 严格校验确认必需 stage 缺失 0、错误 0、完整 scale 事件齐全，发布数据脱敏扫描通过。
 
 ## 4. 当前决策
 
@@ -71,7 +83,9 @@
 | D-009 | 任一待 SCP 数据超过 10G 时先征得用户确认 | 已确认 | 用户明确要求 |
 | D-010 | 优化 baseline 与 eager 深层采集分开 | 已确认 | graph replay 不暴露层内 hook；eager 用于真实 tensor，baseline 用于优化路径和耗时 |
 | D-011 | raw 数据 Git 忽略，只发布 curated/web | 已确认 | raw 含远端 provenance，发布数据必须脱敏 |
-| D-012 | 不伪造融合内核内部数据 | 已确认 | W8A8 per-token 动态 scale 和完整 attention 概率未被内核暴露，只做结构解释并明确标记 |
+| D-012 | 不伪造融合内核内部数据 | 已确认 | Python 可见输入输出边界可采真实值；未返回的 attention 概率和内核 workspace 仍只做结构解释 |
+| D-013 | W8A8 融合边界与 TP2 生成独立前端投影 | 已确认 | 让前端直接消费真实量化链和两 rank 时间线，避免重复解析底层事件 |
+| D-014 | EP=false 时将 MoE 两 rank group 解释为复用 TP group | 已确认 | 避免把通信 group world size 误画成独立 EP2 |
 
 确认后的决策要转写为 `docs/decisions/` 中的 ADR；本表保留摘要。
 
@@ -91,8 +105,6 @@
 2. 是否允许采集并保存极小的权重/激活数值切片，还是只保留统计和归一化热力图？
 3. 第一版是否继续固定 `Hello, my name is`，还是改为更适合中文读者的 prompt？
 4. 视觉表达更偏科普故事，还是更偏源码/算子调试？当前方案建议两层共存、故事模式默认。
-5. 是否需要在第一版展示两个 TP rank 的通信细节，还是只展示拓扑和聚合事件？
-6. 远端正式采集时允许修改教学分支代码，还是必须全部通过外部启动脚本/monkey patch 完成？
 
 ## 7. 明确排除
 
@@ -120,6 +132,8 @@
 | 2026-07-09 | 先运行再做架构 | 增加“最小协议与采集点先行” | 避免一次重型运行后缺数据 | 已确认 | 完整架构仍在数据采集后冻结 |
 | 2026-07-10 | 使用容器 `zsl_m2m_0612` | 改用实际存在的 `zsl_m2m_0612_1` | 指定容器不存在，且只有一个同名前缀容器 | 待验收 | 后续命令使用实际容器 |
 | 2026-07-10 | 第一次正式采集作为最终数据 | 增加动态 rank 修正并用 `p3r2` 重跑 | worker 启动时环境变量未提供 rank，事件需在写入时读取分布式组 | 已处理 | 第一份 380K 数据仅作诊断，不下载为最终包 |
+| 2026-07-10 | W8A8 scale 只能做结构示意 | 核对源码后确认 dispatch/GMM 边界可见，并完成 P4.1 补采 | 原结论把“内核内部临时值”和“Python 可见融合边界”混为一谈 | 已确认 | W8A8 scale 升级为真实数据；attention 内部概率仍为示意 |
+| 2026-07-10 | P4.1 一次启动完成 | `p4r1` 计时工具不存在、`p4r2` 覆盖 CANN 路径，修正后 `p4r3` 成功 | 启动命令环境偏差，均在模型加载前失败 | 已处理 | 失败 run 不同步、不发布；最终数据只使用 `p4r3` |
 
 ## 10. 阶段完成记录
 
@@ -130,6 +144,7 @@
 | P2 采集器 | 已完成 | `collector/`、`schemas/trace-event-v1.schema.json` | 5 个行为测试与语法检查通过 |
 | P3 正式采集 | 已完成 | `data/raw/qwen35-a3b-w8a8-20260710-p3r2` | eager 深层采集通过，输出与旧证据一致 |
 | P4 数据投影 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p3r2` | 454 事件、必需 stage 齐全、错误 0、脱敏通过 |
+| P4.1 融合/并行补采 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r3`、`docs/reports/2026-07-10-p4.1-quantization-and-tp-trace.md` | 1722 事件、量化 scale 与 50 个 TP span 齐全、错误 0 |
 | P5 架构/视觉冻结 | 未开始 | - | - |
 | P6 网站 MVP | 未开始 | - | - |
 | P7 QA/发布 | 未开始 | - | - |

@@ -17,6 +17,10 @@ _CONTEXT: ContextVar[TraceContext] = ContextVar(
     "inference_trace_context",
     default={"phase": "init", "kind": "init", "index": 0},
 )
+_TRACE_SCOPE: ContextVar[str | None] = ContextVar(
+    "inference_trace_scope",
+    default=None,
+)
 _WRITER: TraceWriter | None = None
 _PATCHED: set[str] = set()
 _HOOK_HANDLES: list[Any] = []
@@ -81,8 +85,7 @@ def emit(
 
 def _first_tensor(value: Any) -> Any | None:
     if all(
-        hasattr(value, attribute)
-        for attribute in ("shape", "dtype", "device", "numel")
+        hasattr(value, attribute) for attribute in ("shape", "dtype", "device", "numel")
     ):
         return value
     if isinstance(value, (list, tuple)):
@@ -116,6 +119,182 @@ def _safe_hook(stage: str, callback: Callable[[], dict[str, Any]]) -> None:
             },
             fidelity="EXACT",
         )
+
+
+def _module_descriptor(module: Any) -> dict[str, Any]:
+    attributes: dict[str, Any] = {}
+    for name in (
+        "input_size",
+        "output_size",
+        "input_size_per_partition",
+        "output_size_per_partition",
+        "tp_size",
+        "num_heads",
+        "num_kv_heads",
+        "q_size",
+        "kv_size",
+        "num_experts",
+        "num_local_experts",
+    ):
+        if hasattr(module, name):
+            try:
+                attributes[name] = summarize(getattr(module, name))
+            except Exception:
+                pass
+
+    parameters = []
+    for name, parameter in list(module.named_parameters(recurse=False))[:8]:
+        parameters.append(
+            {
+                "name": name,
+                "tensor": summarize(parameter),
+            }
+        )
+    return {
+        "module": module.__class__.__name__,
+        "attributes": attributes,
+        "localParameters": parameters,
+    }
+
+
+def _parallel_topology(runner: Any = None) -> dict[str, Any]:
+    topology: dict[str, Any] = {
+        "visibleDevices": os.getenv("ASCEND_RT_VISIBLE_DEVICES"),
+        "localRank": os.getenv("LOCAL_RANK"),
+    }
+    try:
+        import torch
+
+        distributed = torch.distributed
+        if distributed.is_available() and distributed.is_initialized():
+            topology["globalRank"] = distributed.get_rank()
+            topology["worldSize"] = distributed.get_world_size()
+        if hasattr(torch, "npu"):
+            topology["currentDevice"] = int(torch.npu.current_device())
+            try:
+                topology["deviceName"] = str(torch.npu.get_device_name())
+            except Exception:
+                pass
+        from vllm.distributed import get_ep_group, get_tp_group
+
+        tp_group = get_tp_group()
+        ep_group = get_ep_group()
+        topology.update(
+            {
+                "tpRank": int(tp_group.rank_in_group),
+                "tpWorldSize": int(tp_group.world_size),
+                "epRank": int(ep_group.rank_in_group),
+                "epWorldSize": int(ep_group.world_size),
+            }
+        )
+        config = getattr(runner, "vllm_config", None)
+        parallel_config = getattr(config, "parallel_config", None)
+        if parallel_config is not None:
+            topology.update(
+                {
+                    "configuredTensorParallelSize": int(
+                        parallel_config.tensor_parallel_size
+                    ),
+                    "configuredPipelineParallelSize": int(
+                        parallel_config.pipeline_parallel_size
+                    ),
+                    "configuredDataParallelSize": int(
+                        parallel_config.data_parallel_size
+                    ),
+                    "expertParallelEnabled": bool(
+                        parallel_config.enable_expert_parallel
+                    ),
+                }
+            )
+    except Exception as exc:
+        topology["captureError"] = f"{exc.__class__.__name__}: {exc}"
+    return topology
+
+
+def _parallel_span_pre_hook(stage: str):
+    def hook(module: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        if not _real_inference():
+            return
+        starts = getattr(module, "_inference_trace_span_starts", None)
+        if starts is None:
+            starts = {}
+            setattr(module, "_inference_trace_span_starts", starts)
+        starts.setdefault(stage, []).append(time.perf_counter_ns())
+        emit(
+            f"parallel.span.{stage}.start",
+            _module_descriptor(module),
+            fidelity="EXACT",
+        )
+
+    return hook
+
+
+def _parallel_span_post_hook(stage: str):
+    def hook(
+        module: Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        output: Any,
+    ) -> None:
+        if not _real_inference():
+            return
+        starts = getattr(module, "_inference_trace_span_starts", {})
+        stage_starts = starts.get(stage, [])
+        started = stage_starts.pop() if stage_starts else None
+        emit(
+            f"parallel.span.{stage}.end",
+            {
+                "module": module.__class__.__name__,
+                "durationNs": (
+                    time.perf_counter_ns() - started if started is not None else None
+                ),
+                "output": summarize(_first_tensor(output)),
+            },
+            fidelity="EXACT",
+        )
+
+    return hook
+
+
+def _register_parallel_span(module: Any, stage: str) -> None:
+    _HOOK_HANDLES.append(
+        module.register_forward_pre_hook(
+            _parallel_span_pre_hook(stage),
+            with_kwargs=True,
+        )
+    )
+    _HOOK_HANDLES.append(
+        module.register_forward_hook(
+            _parallel_span_post_hook(stage),
+            with_kwargs=True,
+            always_call=True,
+        )
+    )
+
+
+def _moe_scope_pre_hook(
+    module: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    if not _real_inference():
+        return
+    tokens = getattr(module, "_inference_trace_scope_tokens", None)
+    if tokens is None:
+        tokens = []
+        setattr(module, "_inference_trace_scope_tokens", tokens)
+    tokens.append(_TRACE_SCOPE.set("moe.layer3"))
+
+
+def _moe_scope_post_hook(
+    module: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    output: Any,
+) -> None:
+    tokens = getattr(module, "_inference_trace_scope_tokens", [])
+    if tokens:
+        _TRACE_SCOPE.reset(tokens.pop())
 
 
 def _forward_tensor_hook(stage: str, *, topk: int = 0):
@@ -234,6 +413,273 @@ def _moe_experts_hook(
     _safe_hook("tensor.moe.experts.layer3", payload)
 
 
+def _argument(
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    name: str,
+    position: int,
+) -> Any:
+    if name in kwargs:
+        return kwargs[name]
+    if len(args) > position:
+        return args[position]
+    return None
+
+
+def _quant_descriptor(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    result = {}
+    for name in (
+        "quant_type",
+        "dispatch_with_quant",
+        "is_int_quant",
+        "is_quant",
+        "is_mxfp",
+        "use_w4a8_per_channel_gmm_swiglu",
+    ):
+        if hasattr(value, name):
+            try:
+                item = getattr(value, name)
+                result[name] = (
+                    item if isinstance(item, (bool, int, float)) else str(item)
+                )
+            except Exception:
+                pass
+    return result
+
+
+def _capture_detail_start(
+    label: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    if _TRACE_SCOPE.get() != "moe.layer3" or not _real_inference():
+        return
+    try:
+        if label.endswith("MoECommMethod.fused_experts"):
+            fused_input = _argument(args, kwargs, "fused_experts_input", 1)
+            emit(
+                "tensor.moe.routing.layer3",
+                {
+                    "hiddenStates": summarize(
+                        getattr(fused_input, "hidden_states", None),
+                        capture_values=True,
+                    ),
+                    "topkIds": summarize(
+                        getattr(fused_input, "topk_ids", None),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "topkWeights": summarize(
+                        getattr(fused_input, "topk_weights", None),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "quant": _quant_descriptor(getattr(fused_input, "quant", None)),
+                    "w1": summarize(
+                        getattr(getattr(fused_input, "weights", None), "w1", None)
+                    ),
+                    "w2": summarize(
+                        getattr(getattr(fused_input, "weights", None), "w2", None)
+                    ),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_dynamic_quant"):
+            emit(
+                "tensor.moe.dynamic_quant_input.layer3",
+                {
+                    "hiddenStates": summarize(
+                        _argument(args, kwargs, "hidden_states", 0),
+                        capture_values=True,
+                    ),
+                    "providedScale": summarize(
+                        _argument(args, kwargs, "dynamic_scale", 1),
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                    "actQuantType": str(kwargs.get("act_quant_type")),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_grouped_matmul_swiglu_quant"):
+            emit(
+                "tensor.moe.gmm1_swiglu_input.layer3",
+                {
+                    "quantizedInput": summarize(kwargs.get("x"), capture_values=True),
+                    "inputScale": summarize(
+                        kwargs.get("x_scale"),
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                    "weight": summarize(kwargs.get("weight")),
+                    "weightScale": summarize(
+                        kwargs.get("weight_scale"),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "groupList": summarize(
+                        kwargs.get("group_list"),
+                        capture_values=True,
+                        sample_limit=512,
+                    ),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_grouped_matmul_gmm2"):
+            emit(
+                "tensor.moe.gmm2_input.layer3",
+                {
+                    "quantizedActivation": summarize(
+                        kwargs.get("hidden_states"),
+                        capture_values=True,
+                    ),
+                    "perTokenScale": summarize(
+                        kwargs.get("per_token_scale"),
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                    "weight": summarize(kwargs.get("weight")),
+                    "weightScale": summarize(
+                        kwargs.get("weight_scale"),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "groupList": summarize(
+                        kwargs.get("group_list"),
+                        capture_values=True,
+                        sample_limit=512,
+                    ),
+                    "groupListType": kwargs.get("group_list_type"),
+                },
+                fidelity="SUMMARY",
+            )
+    except Exception as exc:
+        emit(
+            "instrumentation.detail_capture_error",
+            {"stage": label, "error": f"{exc.__class__.__name__}: {exc}"},
+            fidelity="EXACT",
+        )
+
+
+def _capture_detail_end(label: str, result: Any) -> None:
+    if _TRACE_SCOPE.get() != "moe.layer3" or not _real_inference():
+        return
+    try:
+        if label.endswith(".token_dispatch"):
+            combine = getattr(result, "combine_metadata", None)
+            emit(
+                "tensor.moe.dispatch.layer3",
+                {
+                    "dispatcher": label.rsplit(".", 2)[-2],
+                    "quantizedHiddenStates": summarize(
+                        getattr(result, "hidden_states", None),
+                        capture_values=True,
+                    ),
+                    "dynamicScale": summarize(
+                        getattr(result, "dynamic_scale", None),
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                    "groupList": summarize(
+                        getattr(result, "group_list", None),
+                        capture_values=True,
+                        sample_limit=512,
+                    ),
+                    "groupListType": getattr(result, "group_list_type", None),
+                    "expandedRowIdx": summarize(
+                        getattr(combine, "expanded_row_idx", None),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "epRecvCounts": summarize(
+                        getattr(combine, "ep_recv_counts", None),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                    "tpRecvCounts": summarize(
+                        getattr(combine, "tp_recv_counts", None),
+                        capture_values=True,
+                        sample_limit=128,
+                    ),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_dynamic_quant"):
+            quantized = result[0] if isinstance(result, tuple) else result
+            scale = result[1] if isinstance(result, tuple) and len(result) > 1 else None
+            emit(
+                "tensor.moe.dynamic_quant_output.layer3",
+                {
+                    "quantized": summarize(quantized, capture_values=True),
+                    "dynamicScale": summarize(
+                        scale,
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_grouped_matmul_swiglu_quant"):
+            output = result[0] if isinstance(result, tuple) else result
+            scale = result[1] if isinstance(result, tuple) and len(result) > 1 else None
+            emit(
+                "tensor.moe.gmm1_swiglu_output.layer3",
+                {
+                    "quantizedActivation": summarize(output, capture_values=True),
+                    "outputScale": summarize(
+                        scale,
+                        capture_values=True,
+                        sample_limit=256,
+                    ),
+                },
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("BaseDeviceAdaptor.npu_grouped_matmul_gmm2"):
+            emit(
+                "tensor.moe.gmm2_output.layer3",
+                {"output": summarize(result, capture_values=True)},
+                fidelity="SUMMARY",
+            )
+        elif label.endswith("MoECommMethod.fused_experts"):
+            emit(
+                "tensor.moe.combine.layer3",
+                {
+                    "routedOutput": summarize(
+                        getattr(result, "routed_out", None),
+                        capture_values=True,
+                    ),
+                    "expertTokenCounts": summarize(
+                        getattr(result, "expert_tokens", None),
+                        capture_values=True,
+                        sample_limit=512,
+                    ),
+                    "groupListType": getattr(result, "group_list_type", None),
+                },
+                fidelity="SUMMARY",
+            )
+    except Exception as exc:
+        emit(
+            "instrumentation.detail_capture_error",
+            {"stage": label, "error": f"{exc.__class__.__name__}: {exc}"},
+            fidelity="EXACT",
+        )
+
+
+def _record_parallel_module(name: str, module: Any, stage: str) -> None:
+    _register_parallel_span(module, stage)
+    emit(
+        "parallel.module_shard",
+        {
+            "modulePath": name,
+            "spanStage": stage,
+            **_module_descriptor(module),
+        },
+        fidelity="EXACT",
+    )
+
+
 def _install_selected_hooks(model: Any) -> None:
     if getattr(model, "_inference_trace_hooks_installed", False):
         return
@@ -265,6 +711,7 @@ def _install_selected_hooks(model: Any) -> None:
                         with_kwargs=True,
                     )
                 )
+                _record_parallel_module(name, module, "layer3.qkv_projection")
                 matched.append(name)
             elif name.endswith(".layers.3.self_attn.attn"):
                 _HOOK_HANDLES.append(
@@ -273,6 +720,24 @@ def _install_selected_hooks(model: Any) -> None:
                         with_kwargs=True,
                     )
                 )
+                _HOOK_HANDLES.append(
+                    module.register_forward_hook(
+                        _forward_tensor_hook("tensor.full_attention.output.layer3"),
+                        with_kwargs=True,
+                    )
+                )
+                _record_parallel_module(name, module, "layer3.fused_attention")
+                matched.append(name)
+            elif name.endswith(".layers.3.self_attn.o_proj"):
+                _HOOK_HANDLES.append(
+                    module.register_forward_hook(
+                        _forward_tensor_hook(
+                            "tensor.full_attention.o_projection.layer3"
+                        ),
+                        with_kwargs=True,
+                    )
+                )
+                _record_parallel_module(name, module, "layer3.o_projection")
                 matched.append(name)
             elif name.endswith(".layers.3.mlp.gate"):
                 _HOOK_HANDLES.append(
@@ -281,12 +746,27 @@ def _install_selected_hooks(model: Any) -> None:
                         with_kwargs=True,
                     )
                 )
+                _record_parallel_module(name, module, "layer3.moe_router")
                 matched.append(name)
             elif name.endswith(".layers.3.mlp.experts"):
+                _HOOK_HANDLES.append(
+                    module.register_forward_pre_hook(
+                        _moe_scope_pre_hook,
+                        with_kwargs=True,
+                    )
+                )
+                _record_parallel_module(name, module, "layer3.moe_experts")
                 _HOOK_HANDLES.append(
                     module.register_forward_hook(
                         _moe_experts_hook,
                         with_kwargs=True,
+                    )
+                )
+                _HOOK_HANDLES.append(
+                    module.register_forward_hook(
+                        _moe_scope_post_hook,
+                        with_kwargs=True,
+                        always_call=True,
                     )
                 )
                 matched.append(name)
@@ -321,15 +801,12 @@ def _model_inventory(model: Any) -> dict[str, Any]:
         total_bytes += size
         dtype_counts[dtype] = dtype_counts.get(dtype, 0) + numel
         dtype_bytes[dtype] = dtype_bytes.get(dtype, 0) + size
-        if (
-            len(representatives) < 96
-            and (
-                "embed_tokens" in name
-                or ".layers.0." in name
-                or ".layers.3." in name
-                or ".layers.39." in name
-                or "lm_head" in name
-            )
+        if len(representatives) < 96 and (
+            "embed_tokens" in name
+            or ".layers.0." in name
+            or ".layers.3." in name
+            or ".layers.39." in name
+            or "lm_head" in name
         ):
             representatives.append(
                 {
@@ -394,6 +871,7 @@ def _wrap(label: str, fn: Callable[..., Any]) -> Callable[..., Any]:
             if _real_inference():
                 emit("tensor.logits", call_payload["logits"], fidelity="SUMMARY")
         emit(f"{label}.start", call_payload)
+        _capture_detail_start(label, args, kwargs)
         try:
             result = fn(*args, **kwargs)
         except Exception as exc:
@@ -416,6 +894,11 @@ def _wrap(label: str, fn: Callable[..., Any]) -> Callable[..., Any]:
             if model is not None:
                 try:
                     emit(
+                        "parallel.topology",
+                        _parallel_topology(runner),
+                        fidelity="EXACT",
+                    )
+                    emit(
                         "model.parameter_inventory",
                         _model_inventory(model),
                         fidelity="STRUCTURAL",
@@ -427,6 +910,7 @@ def _wrap(label: str, fn: Callable[..., Any]) -> Callable[..., Any]:
                         {"error": f"{exc.__class__.__name__}: {exc}"},
                         fidelity="EXACT",
                     )
+        _capture_detail_end(label, result)
         emit(
             f"{label}.end",
             {
@@ -482,7 +966,11 @@ def install() -> None:
         ("vllm.entrypoints.llm", "LLM", "__init__"),
         ("vllm.entrypoints.llm", "LLM", "generate"),
         ("vllm.entrypoints.offline_utils", "OfflineInferenceMixin", "_run_completion"),
-        ("vllm.entrypoints.offline_utils", "OfflineInferenceMixin", "_render_and_add_requests"),
+        (
+            "vllm.entrypoints.offline_utils",
+            "OfflineInferenceMixin",
+            "_render_and_add_requests",
+        ),
         ("vllm.entrypoints.offline_utils", "OfflineInferenceMixin", "_add_request"),
         ("vllm.entrypoints.offline_utils", "OfflineInferenceMixin", "_run_engine"),
         ("vllm.engine.llm_engine", "LLMEngine", "add_request"),
@@ -498,6 +986,41 @@ def install() -> None:
         ("vllm_ascend.worker.model_runner_v1", "NPUModelRunner", "_model_forward"),
         ("vllm_ascend.worker.model_runner_v1", "NPUModelRunner", "sample_tokens"),
         ("vllm_ascend.worker.model_runner_v1", "NPUModelRunner", "_sample"),
+        (
+            "vllm_ascend.ops.fused_moe.moe_comm_method",
+            "MoECommMethod",
+            "fused_experts",
+        ),
+        (
+            "vllm_ascend.ops.fused_moe.token_dispatcher",
+            "TokenDispatcherWithMC2",
+            "token_dispatch",
+        ),
+        (
+            "vllm_ascend.ops.fused_moe.token_dispatcher",
+            "TokenDispatcherWithAllGather",
+            "token_dispatch",
+        ),
+        (
+            "vllm_ascend.ops.fused_moe.token_dispatcher",
+            "TokenDispatcherWithAll2AllV",
+            "token_dispatch",
+        ),
+        (
+            "vllm_ascend.device.device_op",
+            "BaseDeviceAdaptor",
+            "npu_dynamic_quant",
+        ),
+        (
+            "vllm_ascend.device.device_op",
+            "BaseDeviceAdaptor",
+            "npu_grouped_matmul_swiglu_quant",
+        ),
+        (
+            "vllm_ascend.device.device_op",
+            "BaseDeviceAdaptor",
+            "npu_grouped_matmul_gmm2",
+        ),
         ("vllm.v1.sample.sampler", "Sampler", "forward"),
         ("vllm.v1.sample.sampler", "Sampler", "sample"),
         ("vllm.v1.sample.sampler", "Sampler", "greedy_sample"),

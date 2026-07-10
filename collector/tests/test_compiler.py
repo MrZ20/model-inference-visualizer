@@ -80,6 +80,13 @@ class TraceCompilerTests(unittest.TestCase):
             self.assertTrue((out / "chapters" / "init.json").exists())
             self.assertTrue((out / "chapters" / "prefill.json").exists())
             self.assertTrue((out / "chapters" / "final.json").exists())
+            self.assertTrue((out / "parallel-summary.json").exists())
+            self.assertTrue((out / "moe-quantization.json").exists())
+            manifest = json.loads((out / "manifest.json").read_text())
+            self.assertEqual(
+                manifest["projections"]["parallel"],
+                "parallel-summary.json",
+            )
 
 
 if __name__ == "__main__":

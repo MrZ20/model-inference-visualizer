@@ -1,0 +1,183 @@
+{
+  "errors": [],
+  "promptTokenCount": 5,
+  "finalTokenIds": [
+    9419,
+    11,
+    821,
+    803,
+    369,
+    498,
+    7525,
+    3855,
+    1089,
+    321
+  ],
+  "generatedTokenIds": [
+    498,
+    7525,
+    3855,
+    1089,
+    321
+  ],
+  "finalText": "Hello, my name is [Your Name], and",
+  "logitTop1Ids": [
+    498,
+    7525,
+    3855,
+    1089,
+    321
+  ],
+  "embeddingShape": [
+    5,
+    2048
+  ],
+  "qkvShapes": {
+    "query": [
+      5,
+      2048
+    ],
+    "key": [
+      5,
+      256
+    ],
+    "value": [
+      5,
+      256
+    ]
+  },
+  "linearAttentionShape": [
+    5,
+    2048
+  ],
+  "routerShape": [
+    5,
+    256
+  ],
+  "routerTopkIds": [
+    [
+      214,
+      202,
+      163,
+      113,
+      123,
+      108,
+      171,
+      75
+    ],
+    [
+      211,
+      199,
+      37,
+      58,
+      75,
+      84,
+      214,
+      113
+    ],
+    [
+      70,
+      90,
+      164,
+      224,
+      219,
+      44,
+      199,
+      6
+    ],
+    [
+      202,
+      44,
+      163,
+      70,
+      76,
+      19,
+      151,
+      244
+    ],
+    [
+      116,
+      44,
+      27,
+      226,
+      224,
+      19,
+      20,
+      68
+    ]
+  ],
+  "logitsShapes": [
+    [
+      1,
+      248320
+    ],
+    [
+      1,
+      248320
+    ],
+    [
+      1,
+      248320
+    ],
+    [
+      1,
+      248320
+    ],
+    [
+      1,
+      248320
+    ]
+  ],
+  "rankCounts": {
+    "-": 238,
+    "1": 742,
+    "0": 742
+  },
+  "detail": {
+    "errors": [],
+    "topologyRanks": [
+      "0",
+      "1"
+    ],
+    "moduleShardStages": [
+      "layer3.fused_attention",
+      "layer3.moe_experts",
+      "layer3.moe_router",
+      "layer3.o_projection",
+      "layer3.qkv_projection"
+    ],
+    "spanCounts": {
+      "layer3.o_projection": {
+        "starts": 10,
+        "ends": 10
+      },
+      "layer3.moe_router": {
+        "starts": 10,
+        "ends": 10
+      },
+      "layer3.qkv_projection": {
+        "starts": 10,
+        "ends": 10
+      },
+      "layer3.moe_experts": {
+        "starts": 10,
+        "ends": 10
+      }
+    },
+    "routingEvents": 10,
+    "dispatchEvents": 10,
+    "gmm1InputEvents": 10,
+    "gmm1OutputEvents": 10,
+    "gmm2InputEvents": 10,
+    "gmm2OutputEvents": 10,
+    "fullRoutingEvents": 10,
+    "fullDispatchScaleEvents": 10,
+    "fullGmm1ScaleEvents": 10,
+    "fullSwigluScaleEvents": 10,
+    "fullGmm2ScaleEvents": 10,
+    "phases": {
+      "prefill": 2,
+      "decode": 8
+    }
+  }
+}

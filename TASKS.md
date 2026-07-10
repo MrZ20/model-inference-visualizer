@@ -61,6 +61,17 @@
 
 **Gate P4**：网页所需节点都有受控数据，发布包无敏感项。
 
+### P4.1：融合边界与 TP2 补采
+
+- [x] 采集 layer 3 MoE 完整 top-k、专家 Token count 和 W8A8 per-token scale。
+- [x] 采集 dispatch、GMM1+SwiGLU、GMM2 的量化输入输出。
+- [x] 采集 rank 0/1 的模块分片和并行 start/end span。
+- [x] 严格校验两 rank、prefill/decode、完整 scale 和配对 span。
+- [x] 生成 `parallel-summary.json` 和 `moe-quantization.json`。
+- [x] 记录 TP group 与 EP=false 的解释边界。
+
+**Gate P4.1**：已满足——量化与并行补采完整，等待用户验收后进入 P5。
+
 ## P5：架构与视觉冻结
 
 - [ ] 根据真实数据更新 `docs/ARCHITECTURE.md`。

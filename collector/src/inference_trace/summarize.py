@@ -15,8 +15,7 @@ def _clip(value: str) -> str:
 
 def _is_tensor_like(value: Any) -> bool:
     return all(
-        hasattr(value, attribute)
-        for attribute in ("shape", "dtype", "device", "numel")
+        hasattr(value, attribute) for attribute in ("shape", "dtype", "device", "numel")
     )
 
 
@@ -57,6 +56,10 @@ def _capture_tensor_values(
             )
         )
         metadata["sample"] = sample.cpu().tolist()
+        metadata["sampleCount"] = int(sample.numel())
+        metadata["valueCoverage"] = (
+            "FULL" if int(sample.numel()) == metadata["numel"] else "PREFIX"
+        )
         stats_values = stats.cpu().tolist()
         metadata["stats"] = dict(
             zip(("min", "max", "mean", "std"), stats_values, strict=True)
@@ -103,10 +106,7 @@ def summarize(
     if isinstance(value, str):
         return _clip(value)
     if isinstance(value, (list, tuple)):
-        return [
-            summarize(item, depth=depth + 1)
-            for item in list(value)[:8]
-        ]
+        return [summarize(item, depth=depth + 1) for item in list(value)[:8]]
     if isinstance(value, dict):
         return {
             _clip(str(key)): summarize(item, depth=depth + 1)
@@ -142,8 +142,5 @@ def summarize(
 def summarize_call(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
     return {
         "args": [summarize(item) for item in list(args[1:5])],
-        "kwargs": {
-            key: summarize(value)
-            for key, value in list(kwargs.items())[:12]
-        },
+        "kwargs": {key: summarize(value) for key, value in list(kwargs.items())[:12]},
     }

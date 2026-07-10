@@ -1,353 +1,309 @@
-# 架构草案
+# 网站架构冻结（P5）
 
-> 状态：概念架构，等待真实数据验证后冻结
-> 核心原则：网页只依赖稳定的轨迹接口，不依赖 vLLM 内部 Python 对象
+> 状态：技术架构已冻结；融合视觉稿等待用户最终验收
+> 日期：2026-07-10
+> 发布运行：`qwen35-a3b-w8a8-20260710-p4r4`
+> 核心原则：静态网站只读取稳定轨迹，不依赖 vLLM Python 对象，不把静态图片轮播伪装成推理动画
 
-## 0. P2–P4 实现状态
+## 0. 已验证基础
 
-第一份可用轨迹已经生成：
+- 无插桩 baseline 证明真实部署初始化、KV Cache、图捕获和优化路径。
+- eager 观测运行提供同一模型、prompt 和 sampling 下的层内真实 tensor。
+- P4.1 提供 W8A8 per-token scale、MoE 路径和 TP=2 双 rank span。
+- P4.2 提供 layer 3 prefill 的完整 Q/K/V 与融合 attention 输出。
+- `softmax @ V` 对融合输出的余弦相似度在两个 rank 上均大于 0.9999988。
+- 最新 web bundle 约 4 MB，包含 init/warmup/prefill/decode 章节和前端专用投影。
 
-- Run ID：`qwen35-a3b-w8a8-20260710-p3r2`。
-- 采集模式：`enforce_eager=True`，用于层内真实 tensor hook。
-- 优化路径证据：无插桩 baseline，包含权重加载、KV Cache、图捕获与优化运行。
-- web bundle：454 个事件，拆分为 init/warmup/prefill/decode。
-- 必需 stage 缺失 0，schema/内容错误 0。
-- rank 0/1 各 129 个可归属事件。
+网站使用“双证据轨”：
 
-架构因此冻结为“双证据轨”：
+1. baseline 说明真实优化运行和初始化；
+2. eager trace 说明层内数据和形状。
 
-1. baseline 说明真实部署初始化和 graph 路径；
-2. eager trace 说明同一模型、prompt 和采样参数下的层内数据。
+网页不得把 eager 耗时当作 graph 模式性能，也不得把离散事件之间的动画插值描述为额外采集到的 NPU 状态。
 
-网页不得把 eager 耗时当作 graph 模式性能，也不得把融合内核没有暴露的
-W8A8 per-token scale 或完整 attention 概率标成 EXACT。
+## 1. 产品与技术约束
 
-## 1. 架构目标
+- 一次真实推理从进程初始化播放到 5 个输出 token。
+- 底层是离散语义事件，视觉通过插值形成连续动画。
+- 点击节点在同一画布内展开内部步骤，不切换为静态图片。
+- 页面采用纵向 scrollytelling + 近全屏 sticky 画布，不做单屏仪表盘。
+- UI 默认 English，完整支持 `EN / 中文` 切换。
+- 所有视觉数据保留 `EXACT / SUMMARY / DERIVED / STRUCTURAL / SCHEMATIC`。
+- 无 SSH、NPU、后端或模型权重时仍可完整运行。
 
-该架构要同时满足：
+## 2. 技术栈
 
-- 采集过程可以深入 vLLM/vLLM Ascend，但采集代码与网页解耦。
-- 网站离线运行，数据可复现、可测试、可发布。
-- 第一版专注 Qwen3.5，但轨迹格式不把模型名写死在核心字段中。
-- 原始大数据和发布小数据分离。
-- 所有动画都能追溯到事件、配置、统计或明确的教学示意。
-
-## 2. 系统数据流
-
-```text
-┌──────────────────────────────┐
-│ Remote Inference Environment │
-│ vLLM + vLLM Ascend + NPU     │
-└──────────────┬───────────────┘
-               │ TraceWriter interface
-               ▼
-┌──────────────────────────────┐
-│ Raw Trace Bundle             │
-│ events / logs / small arrays │
-└──────────────┬───────────────┘
-               │ validate + sanitize + project
-               ▼
-┌──────────────────────────────┐
-│ Curated Trace Model          │
-│ normalized semantic events   │
-└──────────────┬───────────────┘
-               │ build web bundle
-               ▼
-┌──────────────────────────────┐
-│ Static Web Player            │
-│ timeline / views / evidence  │
-└──────────────────────────────┘
-```
-
-## 3. 关键 seam 与深模块
-
-### 3.1 TraceWriter seam
-
-采集代码只学习一个小接口：
-
-```python
-writer.emit(event)
-writer.capture_tensor(ref, tensor, policy)
-writer.close(run_summary)
-```
-
-它隐藏多进程序号、时间戳、裁剪、批量 device-to-host 同步、落盘、失败记录和体积上限。调用点不直接拼 JSON 或操作文件。
-
-第一版预计有两个 adapter：
-
-- `NdjsonTraceWriter`：远端正式采集。
-- `InMemoryTraceWriter`：本地测试与小 tensor 验证。
-
-存在两个真实 adapter 后，这个 seam 才有实际价值。
-
-### 3.2 TraceCompiler seam
-
-```python
-compile_trace(raw_bundle, policy) -> curated_bundle
-```
-
-内部完成 schema 校验、rank 对齐、逻辑 step 合并、脱敏、真实性分级、数据裁剪、源码映射和 web bundle 分片。网页不需要理解 raw trace。
-
-### 3.3 TraceRepository seam
-
-前端只通过下面的概念接口读数据：
-
-```ts
-loadManifest(): Promise<TraceManifest>
-loadChapter(chapterId: string): Promise<TraceChapter>
-loadArtifact(artifactId: string): Promise<TraceArtifact>
-```
-
-第一版 adapter 是静态文件；未来若做本地实时模式，可以增加 HTTP/WebSocket adapter，而无需改播放器。
-
-### 3.4 PlaybackEngine seam
-
-```ts
-reducePlayback(state, command) -> nextState
-selectFrame(trace, state) -> RenderFrame
-```
-
-它隐藏自动播放、速度、单步、回退、跳章、深度视图进入/退出和 decode 循环。视图只渲染 `RenderFrame`，不自己推进时间。
-
-## 4. 轨迹数据模型 v1（草案）
-
-### 4.1 Event
-
-```json
-{
-  "schemaVersion": "1.0",
-  "eventId": "rank0-000184",
-  "runId": "qwen35-a3b-w8a8-20260709",
-  "phase": "inference",
-  "stage": "moe.route",
-  "logicalStep": { "kind": "prefill", "index": 0 },
-  "rank": 0,
-  "processRole": "worker",
-  "timestampNs": 0,
-  "durationNs": 0,
-  "source": {
-    "repository": "vllm-ascend",
-    "commit": "<sha>",
-    "symbol": "<python symbol>",
-    "file": "<repo-relative path>",
-    "line": 0
-  },
-  "inputs": ["tensor-ref"],
-  "outputs": ["tensor-ref"],
-  "payload": {},
-  "fidelity": "EXACT"
-}
-```
-
-`timestampNs` 只能保证 rank 内顺序；跨 rank 展示优先使用 `logicalStep` 和显式同步事件，不假设两个进程时钟完全一致。
-
-### 4.2 TensorRef
-
-```json
-{
-  "id": "prefill.layer3.q",
-  "name": "query",
-  "shape": [5, 16, 256],
-  "executionShape": [8, 16, 256],
-  "dtype": "bfloat16",
-  "device": "npu:0",
-  "rank": 0,
-  "numBytes": 0,
-  "summary": {
-    "min": 0,
-    "max": 0,
-    "mean": 0,
-    "std": 0,
-    "histogram": []
-  },
-  "sample": {
-    "strategy": "fixed-window",
-    "indices": [],
-    "values": []
-  },
-  "fidelity": "SUMMARY"
-}
-```
-
-`shape` 表示语义上的真实 token；`executionShape` 表示 padding/graph 后的执行形状，避免把 5 和 8 混为一谈。
-
-### 4.3 Manifest
-
-Manifest 至少包含：
-
-- 模型 ID、配置摘要与 hash。
-- vLLM/vLLM Ascend commit。
-- PyTorch/torch-npu/CANN 版本。
-- 并行配置、设备匿名拓扑。
-- prompt、sampling 参数、输出。
-- 章节列表、artifact 索引、总大小、checksum。
-- 缺失采集点与已知偏差。
-- 脱敏版本与生成工具版本。
-
-## 5. 轨迹包布局
-
-```text
-data/
-  raw/                         # git ignored
-    <run-id>/
-      manifest.json
-      events-rank0.ndjson
-      events-rank1.ndjson
-      arrays/
-      logs/
-  curated/
-    <run-id>/
-      manifest.json
-      events.ndjson
-      artifacts/
-      validation-report.json
-  web/
-    <run-id>/
-      manifest.json
-      chapters/
-        init.json
-        prefill.json
-        decode-1.json
-      artifacts/
-```
-
-Raw/private 默认不进入 Git；curated 是否提交取决于体积和许可；web fixtures 可提交少量测试样本。
-
-## 6. 前端模块
-
-```text
-app-shell
-  ├─ trace-repository
-  ├─ playback-engine
-  ├─ stage-router
-  ├─ views
-  │   ├─ initialization
-  │   ├─ tokenization
-  │   ├─ scheduler
-  │   ├─ model-overview
-  │   ├─ full-attention
-  │   ├─ linear-attention
-  │   ├─ moe-w8a8
-  │   └─ logits-sampling
-  ├─ tensor-inspector
-  ├─ evidence-panel
-  └─ glossary
-```
-
-视图模块不直接读取网络，也不修改全局时间。它们接收 `RenderFrame` 并发出语义命令，例如 `OPEN_ARTIFACT`、`NEXT_STEP`、`EXIT_DETAIL`。
-
-## 7. 播放状态机
-
-顶层状态：
-
-```text
-loading -> ready -> playing -> paused -> completed
-             └──────────────-> error
-```
-
-正交状态：
-
-- `mode`: story / explore
-- `chapter`: init / prefill / decode-1..5 / final
-- `detail`: overview / selected artifact
-- `speed`: 0.5x / 1x / 2x
-
-所有状态转换由纯 reducer 管理，确保测试可以给定命令序列并断言最终 frame。
-
-## 8. 数据与渲染分界
-
-- 小于约几千单元且需要标签的图使用 SVG。
-- 密集 heatmap 使用 Canvas，数据先转成像素 buffer。
-- 不为完整 vocab 或完整权重创建 DOM 节点。
-- 40 层总览使用聚合条带；只有代表层加载深层 artifact。
-- 所有动画基于语义 frame，不直接重放远端毫秒级调用；真实耗时以标尺/标签展示。
-
-具体阈值在 P4 获取真实发布包后通过性能原型确定。
-
-## 9. 可测试性
-
-### 9.1 采集端
-
-- schema 单元测试。
-- tensor summarizer 的 CPU/NPU 小 tensor 对照。
-- 体积限制、异常和缺失字段测试。
-- rank 内序号与 logical step 合并测试。
-
-### 9.2 编译端
-
-- 脱敏规则测试。
-- shape/token/MoE/logits 不变量测试。
-- deterministic bundle checksum。
-- raw fixture 到 web fixture 的快照测试。
-
-### 9.3 前端
-
-- PlaybackEngine reducer 单元测试。
-- TraceRepository 缺失/损坏/版本不兼容测试。
-- 关键章节模块测试。
-- 端到端：从 ready 播放到 final、回退、跳章、打开详情。
-- 视觉与可访问性检查。
-
-## 10. 建议仓库结构
-
-```text
-model-inference-visualizer/
-  README.md
-  MEMORY.md
-  TASKS.md
-  docs/
-    PROJECT_PLAN.md
-    ARCHITECTURE.md
-    decisions/
-  collector/
-    pyproject.toml
-    src/
-    tests/
-  compiler/
-    src/
-    tests/
-  web/
-    src/
-    public/
-    tests/
-  schemas/
-  data/
-    raw/
-    curated/
-    web/
-  scripts/
-```
-
-是否采用单个 Python package 或拆分 collector/compiler，在 P2 根据远端部署方式决定；不要在没有第二种部署需求前制造额外 seam。
-
-## 11. 初始架构决策
-
-| 决策 | 当前选择 | 状态 |
+| 层 | 选择 | 用途 |
 |---|---|---|
-| 运行模式 | 预录真实轨迹 + 静态回放 | 建议确认 |
-| 前后端契约 | versioned trace schema | 建议确认 |
-| 数据分层 | raw / curated / web | 建议确认 |
-| 前端播放器 | 确定性状态机 | 建议确认 |
-| 深层矩阵 | 代表层 + 固定抽样 | 建议确认 |
-| 实时 SSH/NPU | 第一版排除 | 建议确认 |
-| 模型泛化 | 协议可扩展，UI 先做 Qwen3.5 | 建议确认 |
+| 应用 | Svelte 5 + SvelteKit static adapter + TypeScript | 静态站、响应式状态和章节组合 |
+| 流程图 | SVG + D3 scales/layout helpers | 可点击节点、路径、标签和小矩阵 |
+| 动画 | GSAP timeline | 连续路径、几何、透明度和展开/收起 |
+| 密集数据 | Canvas 2D | 大 heatmap、直方图和 tensor cloud |
+| 样式 | CSS variables + scoped CSS/Sass | 双语、响应式和视觉 token |
+| 测试 | Vitest + Playwright | 深 Module 的 Interface 与关键交互 |
 
-确认后将这些决策分别写入 `docs/decisions/`，并记录取舍与后果。
+不引入 ONNX Runtime Web：Qwen3.5 不在浏览器中计算，网站只回放已验证轨迹。
 
-## 12. 被拒绝的初始方案
+参考项目 Transformer Explainer 使用 Svelte、D3、GSAP 和点击展开的矩阵时间线。我们借鉴其交互语法，但使用独立的数据模型、Ascend/Qwen 叙事和视觉结构。其源码采用 MIT License；若后续直接复制代码片段，必须记录来源并保留许可。
 
-### 浏览器直接加载/推理 35B 模型
+## 3. 系统数据流
 
-不可行且不符合“不需要现场计算”的目标；下载、内存、NPU 能力和浏览器安全都不合适。
+    Remote vLLM + vLLM Ascend + NPU
+        -> TraceWriter
+        -> Raw trace bundle
+        -> TraceCompiler
+        -> Curated trace
+        -> Web bundle
+        -> TraceRepository
+        -> PlaybackEngine
+        -> SceneProjector
+        -> DOM / SVG / Canvas views
 
-### 网站运行时直连 SSH
+采集和编译已经在 P2–P4.2 完成。P6 不回到远端重新解释事件；前端只消费 `data/web/<run-id>`。
 
-会引入凭据、安全、排队、超时和可复现性问题，不适合作为教学网站的默认能力。
+## 4. Deep Module 与 Seam
 
-### 保存并展示所有中间 tensor
+本节使用以下固定术语：Module、Interface、Implementation、Seam、Adapter、Depth、Leverage、Locality。
 
-数据规模巨大，也可能带来模型许可和泄露风险。教学价值主要来自形状、摘要、固定切片与代表步骤。
+### 4.1 TraceRepository Module
 
-### 先搭完整前端再决定采集格式
+Interface：
 
-会把演示数据结构偶然固化成架构。先建立小而稳定的轨迹接口，前端才能长期维护。
+```ts
+export interface TraceRepository {
+  open(runId: string): Promise<TraceSession>;
+}
+
+export interface TraceSession {
+  readonly manifest: TraceManifest;
+  chapter(id: ChapterId): Promise<TraceChapter>;
+  artifact(ref: ArtifactRef): Promise<TraceArtifact>;
+}
+```
+
+Implementation 隐藏 URL、分包、缓存、schema 版本、checksum、懒加载、错误归一化和重复请求合并。调用方不拼接 JSON 路径。
+
+这是一个真实 Seam，因为存在两个 Adapter：
+
+- `StaticTraceRepository`：生产环境读取静态 web bundle。
+- `MemoryTraceRepository`：测试使用内存 fixture，覆盖损坏、缺失和旧 schema。
+
+该 Module 的 Depth 来自“一个 `open`”隐藏整个发布数据布局，为视图提供 Leverage，并把缓存与错误处理集中到一处形成 Locality。
+
+### 4.2 PlaybackEngine Module
+
+Interface：
+
+```ts
+export interface PlaybackEngine {
+  snapshot(): PlaybackSnapshot;
+  dispatch(command: PlaybackCommand): void;
+  subscribe(listener: (snapshot: PlaybackSnapshot) => void): () => void;
+}
+```
+
+Implementation 隐藏：
+
+- play/pause、速度、seek、step 和 chapter 跳转；
+- scroll 进度与自动播放的冲突解决；
+- 离散事件到连续 `0..1` progress 的插值；
+- `overview -> expanding -> detail -> collapsing`；
+- reduced motion；
+- Decode 循环与完成态；
+- 离开详情后恢复同一播放位置。
+
+时钟是内部 Seam：
+
+- `BrowserAnimationClock` 使用 `requestAnimationFrame`。
+- `ManualAnimationClock` 由测试精确推进。
+
+视图只能发送语义命令，不能自行修改时间或创建 GSAP 全局时间线。
+
+### 4.3 SceneProjector Module
+
+Interface：
+
+```ts
+export interface SceneProjector {
+  project(input: {
+    trace: TraceSnapshot;
+    playback: PlaybackSnapshot;
+    locale: Locale;
+    viewport: ViewportClass;
+  }): SceneModel;
+}
+```
+
+这是纯 in-process Module，不制造 Adapter。Implementation 负责：
+
+- 从事件选择当前节点、路径、矩阵切片和解释；
+- 将 fidelity 映射为线型、标签和辅助说明；
+- 在 overview、focus scene、双 rank 和摘要布局之间投影；
+- 生成语言无关的稳定 element ID。
+
+`SceneModel` 是渲染 Module 的唯一输入，也是 Interface 测试的主要断言对象。
+
+### 4.4 LocaleCatalog Module
+
+Interface：
+
+```ts
+export interface LocaleCatalog {
+  translate(key: MessageKey, params?: MessageParams): string;
+}
+```
+
+两个 Adapter 是 `EnglishCatalog` 和 `ChineseCatalog`。trace 只保存 `stageId`、`fidelity`、shape 和数值，不保存界面句子。
+
+### 4.5 不创建统一 Renderer Seam
+
+DOM、SVG 和 Canvas 承担不同职责，并不是可互换 Adapter。为它们强行建立 `Renderer` Interface 只会增加浅层转发。各视图直接消费 `SceneModel`，共享色阶、格式化与交互原语。
+
+## 5. 页面与播放状态
+
+### 5.1 长页面章节
+
+    opening
+      -> initialization
+      -> tokenization
+      -> prefill overview
+      -> attention focus
+      -> moe + w8a8
+      -> tensor parallelism
+      -> logits + decode
+      -> evidence
+
+章节容器约 160–240vh；主画布 sticky 在视口中。滚动只改变 `PlaybackEngine` 的语义 progress，不能让各章节维护独立时间。
+
+### 5.2 正交状态
+
+```text
+transport: loading | ready | playing | paused | completed | error
+chapter:   init | tokenization | prefill | attention | moe | tp | decode | evidence
+focus:     overview | expanding | detail | collapsing
+mode:      story | explore
+locale:    en | zh-CN
+motion:    full | reduced
+```
+
+### 5.3 连续性的真实含义
+
+- 真实数据点是离散的，不声称连续采集了内核每个微步骤。
+- 位置、大小、透明度、路径颜色和矩阵出现顺序可以连续插值。
+- 真实耗时以时间标尺显示；动画时长是教学节奏，两者不能混写。
+- DERIVED attention 从真实 Q/K/V 计算并经融合输出验证。
+- SCHEMATIC 只解释无法直接观测的概念关系。
+
+## 6. 渲染分界
+
+### DOM
+
+- 顶栏、语言切换、播放控制、叙事文字、证据 drawer。
+- 可访问性、键盘焦点和语义按钮。
+
+### SVG
+
+- 当前场景最多约 1,500 个可交互节点。
+- 流程连线、小型矩阵、Token、rank 分片和合并点。
+- 需要 hover、focus、标签或路径动画的数据。
+
+### Canvas
+
+- 超过约 400 个单元的 heatmap/tensor cloud。
+- 不需要逐格 DOM 语义的密集可视化。
+- hover 通过坐标反查数据，不创建每格 DOM。
+
+原始矩阵很大时只展示 shape、统计、固定切片或聚合。完整 vocab 和完整权重永不映射为 DOM 节点。
+
+## 7. 性能预算
+
+- 首屏只加载 manifest 与 overview，压缩后目标不超过 350 KB。
+- attention、MoE、TP 和 decode artifact 按章节懒加载。
+- 发布数据总量以当前约 4 MB 为基准，不在 P6 无理由增加十倍。
+- 常规动画目标 60 fps；密集章节不得长期低于 30 fps。
+- 每帧 JS 主线程工作目标小于 12 ms；避免每帧触发布局测量。
+- 动画优先修改 transform、opacity、SVG attributes 和 Canvas buffer。
+- 同时只激活当前章节及相邻预加载章节。
+- `prefers-reduced-motion` 下取消长路径 tween，保留可理解的分步状态。
+
+## 8. 中英文与持久化
+
+- 默认 `en`。
+- 顶栏 `EN / 中文` 切换只更新 `locale`，不重置 transport、chapter、focus 或 progress。
+- `?lang=en` / `?lang=zh-CN` 优先于本地保存值。
+- 所有 MessageKey 在两种语言中必须完整存在。
+- English 和 Chinese 分别做视觉回归；长字符串不得依赖硬编码宽度。
+
+## 9. 视图 Module
+
+```text
+AppShell
+  TraceRepository
+  PlaybackEngine
+  SceneProjector
+  LocaleCatalog
+  OverviewScene
+  InitializationScene
+  TokenizationScene
+  LayerOverviewScene
+  AttentionFocusScene
+  MoeQuantizationScene
+  TensorParallelScene
+  LogitsDecodeScene
+  EvidenceDrawer
+```
+
+视图 Module 接收 `SceneModel` 并发出 `PlaybackCommand`。它们不读取文件、不推断 fidelity、不拥有全局时钟。
+
+## 10. Interface 测试
+
+- `TraceRepository`：成功加载、缺失章节、checksum 错误、旧 schema、缓存复用。
+- `PlaybackEngine`：命令序列、scroll/play 冲突、seek、focus 展开/收起、Decode 完成、reduced motion。
+- `SceneProjector`：同一 snapshot 在 en/zh、overview/detail、宽屏/摘要布局下的稳定输出。
+- `LocaleCatalog`：两种语言 key 集合完全一致。
+- 端到端：从 initialization 播放到最终文本；点击 Attention 展开后连续显示 QK、mask、softmax；切换语言不丢进度。
+
+Interface 是测试表面。测试不读取 GSAP 内部 timeline，也不依赖 Svelte 私有状态。
+
+## 11. P6 目录建议
+
+```text
+web/
+  src/
+    lib/
+      trace/
+      playback/
+      projection/
+      i18n/
+      render/
+      scenes/
+    routes/
+  static/
+    traces/
+  tests/
+```
+
+## 12. 已冻结决策
+
+| 决策 | 选择 |
+|---|---|
+| 运行模式 | 预录真实轨迹 + 静态回放 |
+| 动画 | 离散事件驱动的连续插值，不使用图片轮播 |
+| 页面 | 纵向 scrollytelling + 全宽 sticky 画布 |
+| 详情 | 点击节点在同一画布连续展开/收起 |
+| 视觉融合 | 全局长卷 + 矩阵剧场 + TP 双轨章节 |
+| 默认语言 | English，完整支持中文切换 |
+| 前端 | Svelte 5 / SvelteKit static / TypeScript |
+| 渲染 | DOM + SVG/D3 + Canvas；GSAP 负责时间线 |
+| 数据 | `qwen35-a3b-w8a8-20260710-p4r4` |
+| 实时 NPU | 第一版排除 |
+
+## 13. 明确拒绝
+
+- 浏览器加载或推理 35B 模型。
+- 网站运行时直连 SSH。
+- 把每个步骤制作成静态截图后轮播。
+- 在一个 1440×1024 画面同时堆满全局流程、双 rank、完整矩阵和所有说明。
+- 为完整 vocab/权重创建 DOM 网格。
+- 为只有一个 Implementation 的功能制造假 Seam。
+- 将教学动画时长冒充真实算子耗时。

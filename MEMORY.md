@@ -5,9 +5,9 @@
 ## 1. 当前状态
 
 - 日期：2026-07-10
-- 当前阶段：P2–P4.2 已完成
-- 当前状态：W8A8、TP2 与 DERIVED attention 热力图均已下载、脱敏、投影并通过严格校验
-- 下一阶段门：用户验收 P4.2 后进入 P5 架构冻结与视觉方向
+- 当前阶段：P5 架构与视觉冻结
+- 当前状态：技术架构、长页面交互、连续点击展开、English 默认和融合视觉方向已确认
+- 下一阶段门：用户验收融合后的长页面视觉稿后进入 P6 scaffold
 - 当前仓库：`/Users/user/work/MrZ20_1/model-inference-visualizer`
 
 ## 2. 北极星
@@ -27,6 +27,8 @@
 - 量化为 W8A8_DYNAMIC，但并非所有模块都使用 int8 路径。
 - 既有流程 TP=2、EP=false；prefill 真实 5 token，执行 padding 到 8。
 - 参考站点采用可交互文本输入、矩阵块、局部放大、参数控制和教科书式解释面板。
+- 参考项目为 `poloclub/transformer-explainer`，MIT License；源码使用 Svelte、D3、GSAP，并在 `AttentionMatrix.svelte` 中通过点击连续展开 QK、Mask 和 Softmax。
+- 参考项目的主流程动画由 GSAP timeline 驱动，不是静态图片轮播；页面结构是宽屏可视化首段加下方长文章。
 - SSH 目标为 `a3-node1`，实际主机为 `liteserver-for-vllm-ascend-00002`。
 - 用户给出的容器名 `zsl_m2m_0612` 不存在；唯一匹配且运行中的容器是 `zsl_m2m_0612_1`。
 - 远端 vLLM Ascend 位于 `/vllm-workspace/vllm-ascend`，main 分支干净，commit 为 `81a8928d0b389751104b3c483f223a86afc04dd3`。
@@ -96,16 +98,22 @@
 | D-013 | W8A8 融合边界与 TP2 生成独立前端投影 | 已确认 | 让前端直接消费真实量化链和两 rank 时间线，避免重复解析底层事件 |
 | D-014 | EP=false 时将 MoE 两 rank group 解释为复用 TP group | 已确认 | 避免把通信 group world size 误画成独立 EP2 |
 | D-015 | 使用完整真实 Q/K/V 离线重建 attention 热力图 | 已确认 | 不修改 CANN 内核也能得到流程正确、由融合输出验证的教学数据 |
+| D-016 | 离散轨迹事件通过语义插值形成连续动画 | 已确认 | 画面连贯，但不伪称采集了内核每个微步骤 |
+| D-017 | 使用纵向 scrollytelling + 全宽 sticky 主画布 | 已确认 | 避免把大量信息压进 A4/仪表盘式单屏 |
+| D-018 | 点击节点在同一画布进入 Focus Scene 并连续展开/收起 | 已确认 | 支持从全局流程深入矩阵、MoE、W8A8 和 TP，而非图片切换 |
+| D-019 | English 为默认 UI，完整支持 `EN / 中文` 切换 | 已确认 | 与源码术语一致，同时保留中文教学；切换不能重置播放状态 |
+| D-020 | 前端采用 Svelte 5/SvelteKit static、TypeScript、D3、GSAP、SVG/Canvas | 已确认 | 参考项目已验证该交互组合；本项目不引入浏览器 ONNX 推理 |
+| D-021 | 三个视觉稿融合为全局长卷、局部矩阵剧场和 TP 双轨章节 | 已确认 | 三者是同一页面的不同缩放层级，不是三套页面 |
 
 确认后的决策要转写为 `docs/decisions/` 中的 ADR；本表保留摘要。
 
 ## 5. 当前默认假设
 
 - 仓库名为 `model-inference-visualizer`。
-- 中文为主，关键术语中英双语。
+- English 为默认语言，所有界面、解释、图例和无障碍文本支持中文切换。
 - 初学者使用故事模式，工程师使用探索模式。
 - 第一版沿用固定 prompt、greedy 和 5 个输出 token。
-- 桌面优先，移动端先做摘要体验。
+- 桌面宽屏优先；主画布使用全宽长页面体验，移动端先做摘要体验。
 - 第一版先本地验收，之后再决定公开部署。
 - 默认不保存或发布可恢复的模型权重值。
 
@@ -114,7 +122,6 @@
 1. 项目最终是公开网站、内部演示，还是仅本地使用？
 2. 是否允许采集并保存极小的权重/激活数值切片，还是只保留统计和归一化热力图？
 3. 第一版是否继续固定 `Hello, my name is`，还是改为更适合中文读者的 prompt？
-4. 视觉表达更偏科普故事，还是更偏源码/算子调试？当前方案建议两层共存、故事模式默认。
 
 ## 7. 明确排除
 
@@ -145,6 +152,8 @@
 | 2026-07-10 | W8A8 scale 只能做结构示意 | 核对源码后确认 dispatch/GMM 边界可见，并完成 P4.1 补采 | 原结论把“内核内部临时值”和“Python 可见融合边界”混为一谈 | 已确认 | W8A8 scale 升级为真实数据；内核原生 attention buffer 仍不可见 |
 | 2026-07-10 | P4.1 一次启动完成 | `p4r1` 计时工具不存在、`p4r2` 覆盖 CANN 路径，修正后 `p4r3` 成功 | 启动命令环境偏差，均在模型加载前失败 | 已处理 | 失败 run 不同步、不发布；最终数据只使用 `p4r3` |
 | 2026-07-10 | attention 热力图只能做纯示意 | 完整采集 Q/K/V 并用 `softmax @ V` 对融合输出验证 | 用户接受离线计算，只要求流程正确 | 已确认 | 热力图升级为 DERIVED；仍不声称是内核原生 buffer |
+| 2026-07-10 | 从三个 1440×1024 单屏方向中选择一个 | 融合为长页面 scrollytelling、点击连续展开、矩阵 Focus Scene 和 TP 双轨章节 | 用户指出单屏信息臃肿，并要求参考项目源码中的真实动态交互 | 已确认 | P5 增加交互规范与 ADR；视觉稿验收后再 scaffold |
+| 2026-07-10 | 中文为主、术语双语 | 改为 English 默认并支持完整 `EN / 中文` 切换 | 用户明确要求网站整体先使用英文 | 已确认 | trace 保持语言无关，语言切换不重置播放状态 |
 
 ## 10. 阶段完成记录
 
@@ -157,6 +166,6 @@
 | P4 数据投影 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p3r2` | 454 事件、必需 stage 齐全、错误 0、脱敏通过 |
 | P4.1 融合/并行补采 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r3`、`docs/reports/2026-07-10-p4.1-quantization-and-tp-trace.md` | 1722 事件、量化 scale 与 50 个 TP span 齐全、错误 0 |
 | P4.2 Attention 重建 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r4/attention-derived.json`、`docs/reports/2026-07-10-p4.2-derived-attention.md` | 16 heads、causal softmax 与融合输出相似度校验通过、错误 0 |
-| P5 架构/视觉冻结 | 未开始 | - | - |
+| P5 架构/视觉冻结 | 进行中 | `docs/ARCHITECTURE.md`、`docs/INTERACTION_DESIGN.md`、`docs/decisions/0004-long-form-interactive-player.md` | 技术与融合方向已冻结，等待融合视觉稿验收 |
 | P6 网站 MVP | 未开始 | - | - |
 | P7 QA/发布 | 未开始 | - | - |

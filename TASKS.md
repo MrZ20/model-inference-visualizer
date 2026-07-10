@@ -86,21 +86,26 @@
 
 ## P5：架构与视觉冻结
 
-- [ ] 根据真实数据更新 `docs/ARCHITECTURE.md`。
-- [ ] 冻结 PlaybackEngine、TraceRepository 和 view model 接口。
-- [ ] 确定 SVG/Canvas 分界与性能预算。
-- [ ] 产出三个视觉方向。
-- [ ] 用户选择一个视觉方向。
-- [ ] 确认桌面首屏、初始化、模型层放大、MoE/W8A8、decode 状态。
-- [ ] 写正式 ADR 并更新 memory。
+- [x] 根据真实数据更新 `docs/ARCHITECTURE.md`。
+- [x] 冻结 PlaybackEngine、TraceRepository、SceneProjector 和 LocaleCatalog Interface。
+- [x] 确定 DOM/SVG/Canvas 分界与性能预算。
+- [x] 产出三个视觉方向。
+- [x] 检查 Transformer Explainer 源码中的连续时间线与 Attention 点击展开。
+- [x] 用户确认融合方向：全局长卷 + 矩阵剧场 + TP 双轨章节。
+- [x] 确认长页面、全宽画布、初始化、层内放大、MoE/W8A8、TP 和 decode 状态。
+- [x] 确认 English 默认与 `EN / 中文` 切换。
+- [x] 写正式 ADR、交互规范并更新 memory。
+- [ ] 用户验收融合后的长页面视觉稿。
 
-**Gate P5**：技术接口与视觉目标都已确认，可开始 scaffold。
+**Gate P5**：技术接口已冻结；融合视觉稿验收后才可开始 scaffold。
 
 ## P6：网站 MVP
 
 - [ ] 创建前端工程、lint、test 和本地开发脚本。
 - [ ] 实现 manifest/chapter/artifact 加载。
 - [ ] 实现播放状态机与时间线。
+- [ ] 实现 scroll-driven 章节与节点连续展开/收起。
+- [ ] 实现 English 默认与 `EN / 中文` 切换，切换时保留播放状态。
 - [ ] 实现初始化主视图。
 - [ ] 实现 tokenization/scheduler/embedding 视图。
 - [ ] 实现 40 层总览。

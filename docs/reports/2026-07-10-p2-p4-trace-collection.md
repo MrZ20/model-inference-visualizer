@@ -101,7 +101,7 @@ final text:          Hello, my name is [Your Name], and
 
 - 深层采集使用 eager；性能和 graph capture 时间必须引用 baseline。
 - 本次 `p3r2` 采集器尚未接入 W8A8 动态 scale 的 Python 可见边界，因此这份旧 run 中不能伪造 scale。后续 `p4r3` 已确认并补采 dispatch、GMM1+SwiGLU 和 GMM2 的真实 per-token scale，详见 `2026-07-10-p4.1-quantization-and-tp-trace.md`。
-- 融合 attention 后端没有暴露完整 attention probability matrix；已有真实 Q/K/V shape、统计和小切片，完整热力图只能标记为教学示意。
+- 这份 `p3r2` 只有 Q/K/V 摘要，不能恢复完整热力图。后续 `p4r4` 已完整采集 Q/K/V，并离线重建通过融合输出校验的 `DERIVED` 热力图。
 
 ## 运行后状态
 

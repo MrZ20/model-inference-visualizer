@@ -5,9 +5,9 @@
 ## 1. 当前状态
 
 - 日期：2026-07-10
-- 当前阶段：P2–P4.1 已完成
-- 当前状态：W8A8 融合边界与 TP2 并行补采已下载、脱敏、投影并通过严格校验
-- 下一阶段门：用户验收 P4.1 后进入 P5 架构冻结与视觉方向
+- 当前阶段：P2–P4.2 已完成
+- 当前状态：W8A8、TP2 与 DERIVED attention 热力图均已下载、脱敏、投影并通过严格校验
+- 下一阶段门：用户验收 P4.2 后进入 P5 架构冻结与视觉方向
 - 当前仓库：`/Users/user/work/MrZ20_1/model-inference-visualizer`
 
 ## 2. 北极星
@@ -67,6 +67,15 @@
 - 运行配置是 TP=2、EP=false；底层 `get_ep_group()` 的 world size 2 是 MoE 通信复用 TP group，不能解释为独立 EP2。
 - `parallel-summary.json` 包含拓扑、模块分片和配对 span；`moe-quantization.json` 包含 10 个 rank × logical-step 的完整量化链。
 - P4.1 严格校验确认必需 stage 缺失 0、错误 0、完整 scale 事件齐全，发布数据脱敏扫描通过。
+- P4.2 最终 run ID 为 `qwen35-a3b-w8a8-20260710-p4r4`，退出码 0，采集器内部约 145.14 秒、墙钟约 166.03 秒；输出 token/text 与前两次正式 run 一致。
+- P4.2 完整采集 layer 3 prefill 的两个 TP rank Q/K/V 和融合 attention 输出；decode 仍保留有界摘要。
+- 每个 rank 有 8 个 Q heads、1 个 KV head、head size 256、scale 0.0625，GQA 为 8:1；两 rank 合计 16 Q heads、2 KV heads。
+- Q/K 在采集点已经完成 QK RMSNorm 和 RoPE；离线重建使用 TND layout、真实 scale、GQA 映射和 causal mask。
+- `softmax @ V` 与融合输出余弦相似度为 rank 0 `0.9999988916`、rank 1 `0.9999988315`；最大绝对误差约 `0.00990`、`0.00798`。
+- softmax 最大行和误差不超过 `2.22e-16`，causal mask 区域最大概率为 0。
+- 16 heads 平均 attention 的第 4 个 query Token 对 key 0–4 的概率约为 `[0.2276, 0.0969, 0.1329, 0.1644, 0.3781]`。
+- P4.2 raw 约 2.0 MB、curated/web 各约 4.0 MB；attention、W8A8、TP、token/logits 和脱敏校验错误均为 0。
+- `attention-derived.json` 提供平均矩阵、16 heads 详情、top key、熵和融合输出比较；fidelity 为 `DERIVED`。
 
 ## 4. 当前决策
 
@@ -77,7 +86,7 @@
 | D-003 | raw/curated/web 三层数据包 | 已确认 | 隔离大数据、敏感信息和发布数据 |
 | D-004 | 网页核心不依赖 vLLM Python 对象 | 已确认 | 降低版本耦合，便于测试和扩展 |
 | D-005 | 第一版 UI 专注 Qwen3.5，协议保留扩展性 | 已确认 | 控制范围，同时避免完全写死 |
-| D-006 | 全部可视元素标记 EXACT/SUMMARY/STRUCTURAL/SCHEMATIC | 已确认 | 防止教学示意冒充真实数据 |
+| D-006 | 全部可视元素标记 EXACT/SUMMARY/DERIVED/STRUCTURAL/SCHEMATIC | 已确认 | 区分直接证据、真实输入重建和教学示意 |
 | D-007 | 40 层总览，代表层深挖，不逐层重复动画 | 已确认 | 保留真实结构并控制认知和性能成本 |
 | D-008 | 单个远端采集包硬上限约 2G | 已确认 | 远端仅剩约 13G，必须留出运行安全空间 |
 | D-009 | 任一待 SCP 数据超过 10G 时先征得用户确认 | 已确认 | 用户明确要求 |
@@ -86,6 +95,7 @@
 | D-012 | 不伪造融合内核内部数据 | 已确认 | Python 可见输入输出边界可采真实值；未返回的 attention 概率和内核 workspace 仍只做结构解释 |
 | D-013 | W8A8 融合边界与 TP2 生成独立前端投影 | 已确认 | 让前端直接消费真实量化链和两 rank 时间线，避免重复解析底层事件 |
 | D-014 | EP=false 时将 MoE 两 rank group 解释为复用 TP group | 已确认 | 避免把通信 group world size 误画成独立 EP2 |
+| D-015 | 使用完整真实 Q/K/V 离线重建 attention 热力图 | 已确认 | 不修改 CANN 内核也能得到流程正确、由融合输出验证的教学数据 |
 
 确认后的决策要转写为 `docs/decisions/` 中的 ADR；本表保留摘要。
 
@@ -132,8 +142,9 @@
 | 2026-07-09 | 先运行再做架构 | 增加“最小协议与采集点先行” | 避免一次重型运行后缺数据 | 已确认 | 完整架构仍在数据采集后冻结 |
 | 2026-07-10 | 使用容器 `zsl_m2m_0612` | 改用实际存在的 `zsl_m2m_0612_1` | 指定容器不存在，且只有一个同名前缀容器 | 待验收 | 后续命令使用实际容器 |
 | 2026-07-10 | 第一次正式采集作为最终数据 | 增加动态 rank 修正并用 `p3r2` 重跑 | worker 启动时环境变量未提供 rank，事件需在写入时读取分布式组 | 已处理 | 第一份 380K 数据仅作诊断，不下载为最终包 |
-| 2026-07-10 | W8A8 scale 只能做结构示意 | 核对源码后确认 dispatch/GMM 边界可见，并完成 P4.1 补采 | 原结论把“内核内部临时值”和“Python 可见融合边界”混为一谈 | 已确认 | W8A8 scale 升级为真实数据；attention 内部概率仍为示意 |
+| 2026-07-10 | W8A8 scale 只能做结构示意 | 核对源码后确认 dispatch/GMM 边界可见，并完成 P4.1 补采 | 原结论把“内核内部临时值”和“Python 可见融合边界”混为一谈 | 已确认 | W8A8 scale 升级为真实数据；内核原生 attention buffer 仍不可见 |
 | 2026-07-10 | P4.1 一次启动完成 | `p4r1` 计时工具不存在、`p4r2` 覆盖 CANN 路径，修正后 `p4r3` 成功 | 启动命令环境偏差，均在模型加载前失败 | 已处理 | 失败 run 不同步、不发布；最终数据只使用 `p4r3` |
+| 2026-07-10 | attention 热力图只能做纯示意 | 完整采集 Q/K/V 并用 `softmax @ V` 对融合输出验证 | 用户接受离线计算，只要求流程正确 | 已确认 | 热力图升级为 DERIVED；仍不声称是内核原生 buffer |
 
 ## 10. 阶段完成记录
 
@@ -145,6 +156,7 @@
 | P3 正式采集 | 已完成 | `data/raw/qwen35-a3b-w8a8-20260710-p3r2` | eager 深层采集通过，输出与旧证据一致 |
 | P4 数据投影 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p3r2` | 454 事件、必需 stage 齐全、错误 0、脱敏通过 |
 | P4.1 融合/并行补采 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r3`、`docs/reports/2026-07-10-p4.1-quantization-and-tp-trace.md` | 1722 事件、量化 scale 与 50 个 TP span 齐全、错误 0 |
+| P4.2 Attention 重建 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r4/attention-derived.json`、`docs/reports/2026-07-10-p4.2-derived-attention.md` | 16 heads、causal softmax 与融合输出相似度校验通过、错误 0 |
 | P5 架构/视觉冻结 | 未开始 | - | - |
 | P6 网站 MVP | 未开始 | - | - |
 | P7 QA/发布 | 未开始 | - | - |

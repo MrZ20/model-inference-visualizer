@@ -36,7 +36,7 @@
     },
     "stage": {"type": "string"},
     "fidelity": {
-      "enum": ["EXACT", "SUMMARY", "STRUCTURAL", "SCHEMATIC"]
+      "enum": ["EXACT", "SUMMARY", "DERIVED", "STRUCTURAL", "SCHEMATIC"]
     },
     "payload": {"type": "object"}
   },

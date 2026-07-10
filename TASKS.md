@@ -54,7 +54,7 @@
 - [x] 通过 rank、单调时间和 logical step 归属多进程事件。
 - [x] 自动校验 token、shape、MoE top-k、logits/greedy 和 TP rank 不变量。
 - [x] 脱敏主机、路径和 IP，并执行发布数据扫描。
-- [x] 生成 EXACT/SUMMARY/STRUCTURAL 标记；SCHEMATIC 留给前端教学层。
+- [x] 生成 EXACT/SUMMARY/DERIVED/STRUCTURAL 标记；SCHEMATIC 留给前端教学层。
 - [x] 生成 curated bundle 和 validation report。
 - [x] 生成 init/warmup/prefill/decode 分章节 web bundle。
 - [x] 测量 raw、curated 和 web bundle 体积。
@@ -71,6 +71,18 @@
 - [x] 记录 TP group 与 EP=false 的解释边界。
 
 **Gate P4.1**：已满足——量化与并行补采完整，等待用户验收后进入 P5。
+
+### P4.2：离线 Attention 重建
+
+- [x] 完整采集 layer 3 prefill 的 Q/K/V 和融合 attention 输出。
+- [x] 按 TP、TND、GQA、scale 和 causal mask 离线计算 scores/softmax。
+- [x] 生成 16 heads 明细与平均 5×5 attention 热力图。
+- [x] 使用 `softmax @ V` 对比融合输出并设置相似度门槛。
+- [x] 新增 `DERIVED` fidelity、投影和校验报告。
+- [x] 完成数据脱敏、体积和远端清理检查。
+
+**Gate P4.2**：已满足——attention 热力图流程经过真实融合输出验证，等待用户验收后进入 P5。
+
 
 ## P5：架构与视觉冻结
 

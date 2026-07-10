@@ -22,4 +22,4 @@
 - W8A8 per-token scale 可以作为真实数据展示。
 - 前端可以画出两个 rank 的矩阵分片、并行轨道和局部量化差异。
 - trace duration 含 eager 和采集同步开销，只用于事件播放，不用于性能结论。
-- 融合 attention 未返回的概率矩阵和 CANN 内核临时 workspace 仍只能教学示意。
+- 融合 attention 未返回的原生概率 buffer 和 CANN workspace 仍不可见；后续 ADR-0003 允许用真实 Q/K/V 生成经过融合输出验证的 DERIVED 概率矩阵。

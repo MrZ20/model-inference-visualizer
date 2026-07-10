@@ -30,6 +30,7 @@ _LAST_INFERENCE_CONTEXT: TraceContext = {
     "kind": "inference",
     "index": 0,
 }
+FULL_ATTENTION_CAPTURE_LIMIT = 16 * 1024
 
 
 def step_from_scheduler(
@@ -359,14 +360,66 @@ def _attention_pre_hook(
             k = values[1]
         if v is None and len(values) > 2:
             v = values[2]
+        capture_limit = (
+            FULL_ATTENTION_CAPTURE_LIMIT if _CONTEXT.get()["phase"] == "prefill" else 64
+        )
+
+        impl = getattr(module, "impl", None)
+
+        def attention_attribute(name: str) -> Any:
+            for owner in (module, impl):
+                if owner is not None and hasattr(owner, name):
+                    return getattr(owner, name)
+            return None
+
         return {
             "module": module.__class__.__name__,
-            "query": summarize(q, capture_values=True),
-            "key": summarize(k, capture_values=True),
-            "value": summarize(v, capture_values=True),
+            "inputLayout": "TND",
+            "numHeads": attention_attribute("num_heads"),
+            "numKvHeads": attention_attribute("num_kv_heads"),
+            "headSize": attention_attribute("head_size"),
+            "scale": attention_attribute("scale"),
+            "slidingWindow": attention_attribute("sliding_window"),
+            "query": summarize(
+                q,
+                capture_values=True,
+                sample_limit=capture_limit,
+            ),
+            "key": summarize(
+                k,
+                capture_values=True,
+                sample_limit=capture_limit,
+            ),
+            "value": summarize(
+                v,
+                capture_values=True,
+                sample_limit=capture_limit,
+            ),
         }
 
     _safe_hook("tensor.full_attention.qkv.layer3", payload)
+
+
+def _attention_output_hook(
+    module: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    output: Any,
+) -> None:
+    def payload() -> dict[str, Any]:
+        capture_limit = (
+            FULL_ATTENTION_CAPTURE_LIMIT if _CONTEXT.get()["phase"] == "prefill" else 64
+        )
+        return {
+            "module": module.__class__.__name__,
+            "output": summarize(
+                _first_tensor(output),
+                capture_values=True,
+                sample_limit=capture_limit,
+            ),
+        }
+
+    _safe_hook("tensor.full_attention.output.layer3", payload)
 
 
 def _moe_gate_hook(
@@ -722,7 +775,7 @@ def _install_selected_hooks(model: Any) -> None:
                 )
                 _HOOK_HANDLES.append(
                     module.register_forward_hook(
-                        _forward_tensor_hook("tensor.full_attention.output.layer3"),
+                        _attention_output_hook,
                         with_kwargs=True,
                     )
                 )

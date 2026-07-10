@@ -9,6 +9,9 @@ from pathlib import Path
 COLLECTOR_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(COLLECTOR_ROOT / "src"))
 
+from inference_trace.attention_projection import (  # noqa: E402
+    validate_attention_artifact,
+)
 from inference_trace.qwen_validation import validate_events  # noqa: E402
 
 
@@ -17,10 +20,16 @@ def main() -> int:
     parser.add_argument("events_json", type=Path)
     parser.add_argument("report_json", type=Path)
     parser.add_argument("--require-detail", action="store_true")
+    parser.add_argument("--attention-derived", type=Path)
     args = parser.parse_args()
 
     events = json.loads(args.events_json.read_text(encoding="utf-8"))
     report = validate_events(events, require_detail=args.require_detail)
+    if args.attention_derived is not None:
+        artifact = json.loads(args.attention_derived.read_text(encoding="utf-8"))
+        attention_report = validate_attention_artifact(artifact)
+        report["attentionDerived"] = attention_report
+        report["errors"].extend(attention_report["errors"])
     args.report_json.parent.mkdir(parents=True, exist_ok=True)
     args.report_json.write_text(
         json.dumps(report, ensure_ascii=False, indent=2),

@@ -6,6 +6,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from .attention_projection import derive_attention, validate_attention_artifact
+
 
 REQUIRED_EVENT_KEYS = {
     "schemaVersion",
@@ -229,6 +231,8 @@ def compile_trace(
     }
     events.sort(key=lambda event: (event["timestampNs"], event["eventId"]))
     events = [_sanitize(event, hostnames) for event in events]
+    attention_artifact = derive_attention(events)
+    attention_validation = validate_attention_artifact(attention_artifact)
 
     stage_counts = Counter(event["stage"] for event in events)
     phase_counts = Counter(event["phase"] for event in events)
@@ -259,6 +263,18 @@ def compile_trace(
         ),
         encoding="utf-8",
     )
+    (output_dir / "attention-derived.json").write_text(
+        json.dumps(
+            attention_artifact,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "attention-validation-report.json").write_text(
+        json.dumps(attention_validation, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     chapter_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for event in events:
@@ -284,6 +300,10 @@ def compile_trace(
         "chapters": {
             name: len(items) for name, items in sorted(chapter_events.items())
         },
+        "attentionDerived": {
+            "status": attention_artifact["status"],
+            "errors": len(attention_validation["errors"]),
+        },
     }
     (output_dir / "validation-report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2),
@@ -303,6 +323,7 @@ def compile_trace(
                 "projections": {
                     "parallel": "parallel-summary.json",
                     "moeQuantization": "moe-quantization.json",
+                    "attentionDerived": "attention-derived.json",
                 },
             },
             ensure_ascii=False,

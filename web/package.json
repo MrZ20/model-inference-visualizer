@@ -1,0 +1,36 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync-trace": "node scripts/sync-trace.mjs",
+    "predev": "npm run sync-trace",
+    "dev": "vite",
+    "prebuild": "npm run sync-trace",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.2.6",
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@tabler/icons-svelte": "^3.35.0",
+    "svelte": "^5.53.5"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.53.3",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "svelte-check": "^4.3.1",
+    "typescript": "^5.8.3",
+    "vite": "6.4.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

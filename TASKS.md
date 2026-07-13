@@ -95,28 +95,28 @@
 - [x] 确认长页面、全宽画布、初始化、层内放大、MoE/W8A8、TP 和 decode 状态。
 - [x] 确认 English 默认与 `EN / 中文` 切换。
 - [x] 写正式 ADR、交互规范并更新 memory。
-- [ ] 用户验收融合后的长页面视觉稿。
+- [x] 用户验收融合后的长页面视觉稿，并授权进入 P6。
 
-**Gate P5**：技术接口已冻结；融合视觉稿验收后才可开始 scaffold。
+**Gate P5**：已满足——技术接口与融合视觉稿均已冻结并验收。
 
 ## P6：网站 MVP
 
-- [ ] 创建前端工程、lint、test 和本地开发脚本。
-- [ ] 实现 manifest/chapter/artifact 加载。
-- [ ] 实现播放状态机与时间线。
-- [ ] 实现 scroll-driven 章节与节点连续展开/收起。
-- [ ] 实现 English 默认与 `EN / 中文` 切换，切换时保留播放状态。
-- [ ] 实现初始化主视图。
-- [ ] 实现 tokenization/scheduler/embedding 视图。
-- [ ] 实现 40 层总览。
-- [ ] 实现 full attention 代表层。
-- [ ] 实现 linear attention 代表层。
-- [ ] 实现 MoE/W8A8 视图。
-- [ ] 实现 logits/sampling/decode 视图。
-- [ ] 实现 tensor inspector、证据面板和术语表。
-- [ ] 实现错误态、加载态、reduced motion 和键盘控制。
+- [x] 创建前端工程、lint、test 和本地开发脚本。
+- [x] 实现 manifest/chapter/artifact 加载。
+- [x] 实现播放状态机与时间线。
+- [x] 实现 scroll-driven 章节与节点连续展开/收起。
+- [x] 实现 English 默认与 `EN / 中文` 切换，切换时保留播放状态。
+- [x] 实现初始化主视图。
+- [x] 实现 tokenization/scheduler/embedding 视图。
+- [x] 实现 40 层总览。
+- [x] 实现 full attention 代表层。
+- [x] 实现 linear attention 代表层。
+- [x] 实现 MoE/W8A8 视图。
+- [x] 实现 logits/sampling/decode 视图。
+- [x] 实现 tensor inspector、证据面板和术语表。
+- [x] 实现错误态、加载态、reduced motion 和键盘控制。
 
-**Gate P6**：可从初始化播放到最终文本，关键交互均可用。
+**Gate P6**：已满足——可从初始化播放到最终文本，关键交互、双语和数据证据均可用；等待用户验收后进入 P7。
 
 ## P7：QA 与交付
 

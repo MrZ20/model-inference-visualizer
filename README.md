@@ -11,9 +11,19 @@ Qwen3.5-35B-A3B W8A8 / vLLM Ascend 推理轨迹，动态展示：
 
 ## 当前状态
 
-当前已完成 **P2–P4.2 采集与数据投影**，正在完成 **P5 架构与视觉冻结**。
+当前已完成 **P6 网站 MVP**，等待用户验收后进入 P7 交付终检。
 
-最新 `p4r4` web 数据约 4 MB，包含精确输出、TP rank、W8A8 per-token scale、完整 MoE 路径、关键 tensor、16-head DERIVED attention 和融合输出校验。技术架构已经冻结为长页面连续播放器、点击展开 Focus Scene、English 默认与中英文切换；融合视觉稿验收后才开始搭建前端。
+最新 `p4r4` web 数据约 4 MB，包含精确输出、TP rank、W8A8 per-token scale、完整 MoE 路径、关键 tensor、16-head DERIVED attention 和融合输出校验。前端已经实现全宽长页面、共享连续播放器、Attention/MoE/TP 点击展开、English 默认与中英文切换、证据抽屉和张量检查器。
+
+## 本地运行
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+`predev` 会自动把受控的 `p4r4` web bundle 同步到静态目录。生产验证使用 `npm run check && npm test && npm run build`。
 
 ## 文档入口
 
@@ -22,6 +32,7 @@ Qwen3.5-35B-A3B W8A8 / vLLM Ascend 推理轨迹，动态展示：
 - [交互与视觉规范](docs/INTERACTION_DESIGN.md)：长页面、全宽画布、点击展开、双语和融合视觉方向。
 - [项目 Memory](MEMORY.md)：当前共识、固定事实、决策、假设、开放问题与偏离记录。
 - [任务清单](TASKS.md)：按依赖排序的可执行任务与阶段验收门。
+- [P6 设计验收](design-qa.md)：目标视觉对照、浏览器交互、控制台和构建结果。
 - [P1 环境核查报告](docs/reports/2026-07-10-p1-environment-audit.md)：远端容器、版本、NPU、模型缓存和磁盘结论。
 - [P1 baseline 报告](docs/reports/2026-07-10-p1-baseline.md)：测试结果、耗时、警告和运行后状态。
 - [P2–P4 采集报告](docs/reports/2026-07-10-p2-p4-trace-collection.md)：采集实现、正式运行、数据内容、校验结果和已知边界。

@@ -4,10 +4,10 @@
 
 ## 1. 当前状态
 
-- 日期：2026-07-10
-- 当前阶段：P5 架构与视觉冻结
-- 当前状态：技术架构、长页面交互、连续点击展开、English 默认和融合视觉方向已确认
-- 下一阶段门：用户验收融合后的长页面视觉稿后进入 P6 scaffold
+- 日期：2026-07-12
+- 当前阶段：P6 网站 MVP 已完成
+- 当前状态：SvelteKit 静态站、真实轨迹加载、连续播放器、长页面、三类 Focus Scene、双语、证据面板和张量检查器均已实现并通过浏览器验收
+- 下一阶段门：用户验收 P6 后进入 P7 数据事实、移动端、性能、许可、脱敏与交付终检
 - 当前仓库：`/Users/user/work/MrZ20_1/model-inference-visualizer`
 
 ## 2. 北极星
@@ -102,8 +102,10 @@
 | D-017 | 使用纵向 scrollytelling + 全宽 sticky 主画布 | 已确认 | 避免把大量信息压进 A4/仪表盘式单屏 |
 | D-018 | 点击节点在同一画布进入 Focus Scene 并连续展开/收起 | 已确认 | 支持从全局流程深入矩阵、MoE、W8A8 和 TP，而非图片切换 |
 | D-019 | English 为默认 UI，完整支持 `EN / 中文` 切换 | 已确认 | 与源码术语一致，同时保留中文教学；切换不能重置播放状态 |
-| D-020 | 前端采用 Svelte 5/SvelteKit static、TypeScript、D3、GSAP、SVG/Canvas | 已确认 | 参考项目已验证该交互组合；本项目不引入浏览器 ONNX 推理 |
+| D-020 | 前端采用 Svelte 5/SvelteKit static 与 TypeScript，P6 以 DOM/CSS/SVG 和 requestAnimationFrame 为主 | 已实现 | 当前矩阵规模很小，无需引入 Canvas；D3/GSAP 留到数据或编排复杂度确实需要时再添加 |
 | D-021 | 三个视觉稿融合为全局长卷、局部矩阵剧场和 TP 双轨章节 | 已确认 | 三者是同一页面的不同缩放层级，不是三套页面 |
+| D-022 | PlaybackEngine、TraceRepository、SceneProjector 与 LocaleCatalog 保持独立可测试模块 | 已实现 | 页面只消费稳定接口，轨迹读取、时间推进、投影和文案可分别验证 |
+| D-023 | P6 动画由 requestAnimationFrame、CSS 插值和滚动观察器共同驱动 | 已实现 | 真实轨迹是离散事件，但界面可连续播放且不伪造新的采集值 |
 
 确认后的决策要转写为 `docs/decisions/` 中的 ADR；本表保留摘要。
 
@@ -154,6 +156,7 @@
 | 2026-07-10 | attention 热力图只能做纯示意 | 完整采集 Q/K/V 并用 `softmax @ V` 对融合输出验证 | 用户接受离线计算，只要求流程正确 | 已确认 | 热力图升级为 DERIVED；仍不声称是内核原生 buffer |
 | 2026-07-10 | 从三个 1440×1024 单屏方向中选择一个 | 融合为长页面 scrollytelling、点击连续展开、矩阵 Focus Scene 和 TP 双轨章节 | 用户指出单屏信息臃肿，并要求参考项目源码中的真实动态交互 | 已确认 | P5 增加交互规范与 ADR；视觉稿验收后再 scaffold |
 | 2026-07-10 | 中文为主、术语双语 | 改为 English 默认并支持完整 `EN / 中文` 切换 | 用户明确要求网站整体先使用英文 | 已确认 | trace 保持语言无关，语言切换不重置播放状态 |
+| 2026-07-12 | 视觉稿之后再决定页面是否能真正展开 | P6 已实现 Attention、MoE 和 TP 的同页连续展开，不使用图片轮播 | 用户明确要求像参考项目一样点击流程查看动态细节 | 已确认 | 共享播放状态同时驱动章节、进度与 Focus Scene |
 
 ## 10. 阶段完成记录
 
@@ -166,6 +169,6 @@
 | P4 数据投影 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p3r2` | 454 事件、必需 stage 齐全、错误 0、脱敏通过 |
 | P4.1 融合/并行补采 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r3`、`docs/reports/2026-07-10-p4.1-quantization-and-tp-trace.md` | 1722 事件、量化 scale 与 50 个 TP span 齐全、错误 0 |
 | P4.2 Attention 重建 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r4/attention-derived.json`、`docs/reports/2026-07-10-p4.2-derived-attention.md` | 16 heads、causal softmax 与融合输出相似度校验通过、错误 0 |
-| P5 架构/视觉冻结 | 进行中 | `docs/ARCHITECTURE.md`、`docs/INTERACTION_DESIGN.md`、`docs/decisions/0004-long-form-interactive-player.md` | 技术与融合方向已冻结，等待融合视觉稿验收 |
-| P6 网站 MVP | 未开始 | - | - |
+| P5 架构/视觉冻结 | 已完成 | `docs/ARCHITECTURE.md`、`docs/INTERACTION_DESIGN.md`、`docs/assets/p5-fused-long-scroll-direction.png` | 技术与融合视觉方向已验收并进入实现 |
+| P6 网站 MVP | 已完成 | `web/`、`design-qa.md` | 7 个单测、类型检查、静态构建与内置浏览器关键交互均通过，等待用户验收 |
 | P7 QA/发布 | 未开始 | - | - |

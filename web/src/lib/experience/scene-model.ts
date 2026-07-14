@@ -2,7 +2,10 @@ export type TensorSummary = {
   shape: number[];
   dtype?: string;
   device?: string;
+  numel?: number;
   sample?: number[];
+  sampleCount?: number;
+  valueCoverage?: 'PREFIX';
   stats?: { min: number; max: number; mean: number; std: number };
 };
 
@@ -69,6 +72,12 @@ export interface TraceExperience {
     fidelity: 'EXACT';
   };
   layers: ModelLayer[];
+  embedding: TensorSummary & {
+    rank: number;
+    module: string;
+    valueCoverage: 'PREFIX';
+    fidelity: 'SUMMARY';
+  };
   linearAttention: {
     layerIndex: number;
     module: string;
@@ -145,8 +154,12 @@ export interface TraceExperience {
     steps: Array<{
       index: number;
       tokenId: number;
+      sourcePhase: 'prefill' | 'decode';
+      logicalStepIndex: number;
       logitsShape: number[];
       topCandidates: Array<{ tokenId: number; logit: number }>;
+      logitsFidelity: 'SUMMARY';
+      selectionFidelity: 'EXACT';
     }>;
     fidelity: 'EXACT';
   };
@@ -173,7 +186,10 @@ const tensor = (value: any, label: string): TensorSummary => {
     shape: value.shape,
     dtype: value.dtype,
     device: value.device,
+    numel: value.numel,
     sample: value.sample,
+    sampleCount: value.sampleCount,
+    valueCoverage: value.valueCoverage,
     stats: value.stats
   };
 };
@@ -196,6 +212,18 @@ export function buildTraceExperience(artifacts: TraceArtifacts): TraceExperience
   }
   const prompt = runStart.payload?.prompts?.[0];
   if (typeof prompt !== 'string') throw new Error('p4r4 trace is missing the prompt');
+
+  const embeddingEvent = artifacts.prefillEvents.find(
+    (event) => event.stage === 'tensor.embedding' && event.rank === '0'
+  );
+  const embeddingOutput = embeddingEvent?.payload?.output;
+  const embeddingShape = artifacts.validation.embeddingShape;
+  if (!embeddingEvent?.payload?.module || !embeddingOutput?.shape || embeddingOutput.valueCoverage !== 'PREFIX') {
+    throw new Error('p4r4 prefill trace is missing the embedding summary');
+  }
+  if (!Array.isArray(embeddingShape) || embeddingShape.join(',') !== embeddingOutput.shape.join(',')) {
+    throw new Error('p4r4 validation and captured embedding shapes do not match');
+  }
 
   const linearAttention = artifacts.prefillEvents.find(
     (event) => event.stage === 'tensor.linear_attention.layer0' && event.rank === '0'
@@ -339,6 +367,13 @@ export function buildTraceExperience(artifacts: TraceArtifacts): TraceExperience
       }
       return { index, type, fidelity: 'EXACT' as const };
     }),
+    embedding: {
+      ...tensor(embeddingOutput, 'embedding output'),
+      rank: Number(embeddingEvent.rank),
+      module: embeddingEvent.payload.module,
+      valueCoverage: 'PREFIX',
+      fidelity: 'SUMMARY'
+    },
     linearAttention: {
       layerIndex: 0,
       module: linearAttention.payload.module,
@@ -399,17 +434,27 @@ export function buildTraceExperience(artifacts: TraceArtifacts): TraceExperience
       finalText: artifacts.validation.finalText,
       completion: artifacts.validation.finalText.slice(prompt.length),
       steps: generatedTokenIds.map((tokenId: number, index: number) => {
-        const logits = generationLogits[index]?.payload;
+        const logitsEvent = generationLogits[index];
+        const logits = logitsEvent?.payload;
         const indices = logits?.topk?.indices?.[0] ?? [];
         const values = logits?.topk?.values?.[0] ?? [];
+        const sourcePhase = logitsEvent?.logicalStep?.kind;
+        const logicalStepIndex = logitsEvent?.logicalStep?.index;
+        if ((sourcePhase !== 'prefill' && sourcePhase !== 'decode') || typeof logicalStepIndex !== 'number') {
+          throw new Error(`p4r4 trace is missing generation provenance for output ${index}`);
+        }
         return {
           index,
           tokenId,
+          sourcePhase,
+          logicalStepIndex,
           logitsShape: logitsShapes[index],
-          topCandidates: indices.slice(0, 5).map((candidateId: number, candidateIndex: number) => ({
+          topCandidates: indices.map((candidateId: number, candidateIndex: number) => ({
             tokenId: candidateId,
             logit: values[candidateIndex]
-          }))
+          })),
+          logitsFidelity: 'SUMMARY',
+          selectionFidelity: 'EXACT'
         };
       }),
       fidelity: 'EXACT'

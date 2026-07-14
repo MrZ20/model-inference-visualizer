@@ -377,7 +377,13 @@
           <button class="action-button hero-play" aria-label={`${t('startTrace')}: ${t('init')}`} on:click={startTrace}><IconPlayerPlay size={18} />{t('startTrace')}</button>
         </div>
         <div class="flow-intro"><h2>{t('globalFlowTitle')}</h2><p>{t('globalFlowBody')}</p></div>
-        <GlobalFlow {experience} progress={sceneProgress('overview')} locale={playback.locale} onNavigate={setViewChapter} />
+        <GlobalFlow
+          {experience}
+          progress={sceneProgress('overview')}
+          locale={playback.locale}
+          motion={playback.motion}
+          onNavigate={setViewChapter}
+        />
         <div class="overview-evidence">
           <span><small>{t('prompt')}</small><strong class="mono">{experience.run.prompt}</strong></span>
           <span><small>{t('model')}</small><strong>Qwen3.5-35B-A3B · W8A8</strong></span>

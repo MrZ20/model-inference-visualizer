@@ -14,6 +14,10 @@
   // chart on that completed decision instead of advancing it one step early.
   $: activeStepIndex = Math.max(0, Math.min(decode.steps.length - 1, completedSteps - 1));
   $: activeStep = decode.steps[activeStepIndex];
+  $: decodePasses = decode.steps.filter((step) => step.sourcePhase === 'decode');
+  $: completedDecodePasses = decode.steps
+    .slice(0, completedSteps)
+    .filter((step) => step.sourcePhase === 'decode').length;
   $: revealLength = Math.round(decode.completion.length * completedSteps / decode.steps.length);
   $: visibleText = `${decode.prompt}${decode.completion.slice(0, revealLength)}`;
 </script>
@@ -42,7 +46,7 @@
 
     <article class="decode-cache">
       <div class="visual-label"><span>{t('kvCache')}</span><small>{t('reuseState')}</small></div>
-      <div>{#each decode.steps as _, index}<i class:filled={index < completedSteps}><span>{index + 1}</span></i>{/each}</div>
+      <div>{#each decodePasses as step, index}<i class:filled={index < completedDecodePasses}><span>{step.logicalStepIndex}</span></i>{/each}</div>
     </article>
   </div>
 
@@ -55,7 +59,7 @@
   <div class="decode-steps" role="list" aria-label={t('decodeSteps')}>
     {#each decode.steps as step}
       <article role="listitem" class:active={step.index === activeStepIndex && progress > 0} class:complete={step.index < completedSteps}>
-        <span>{t('step')} {step.index + 1}</span>
+        <span>{step.sourcePhase === 'prefill' ? t('prefillSelection') : `${t('decodePass')} ${step.logicalStepIndex}`}</span>
         <strong class="mono">{step.tokenId}</strong>
         <small class="mono">[{step.logitsShape.join(', ')}]</small>
         <i></i>

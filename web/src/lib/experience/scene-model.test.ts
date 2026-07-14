@@ -46,6 +46,25 @@ describe('buildTraceExperience', () => {
     expect(experience.linearAttention.output.stats?.std).toBeCloseTo(0.0162337776);
   });
 
+  it('projects the captured embedding summary without inventing per-row samples', () => {
+    const experience = buildTraceExperience(artifacts);
+
+    expect(experience.embedding).toMatchObject({
+      rank: 0,
+      module: 'AscendVocabParallelEmbedding',
+      shape: [5, 2048],
+      dtype: 'torch.bfloat16',
+      device: 'npu:0',
+      numel: 10240,
+      sampleCount: 64,
+      valueCoverage: 'PREFIX',
+      fidelity: 'SUMMARY'
+    });
+    expect(experience.embedding.sample).toHaveLength(64);
+    expect(experience.embedding.sample?.[0]).toBe(0.01007080078125);
+    expect(experience.embedding.stats?.std).toBeCloseTo(0.0104839215);
+  });
+
   it('projects the derived layer-3 full-attention representative', () => {
     const experience = buildTraceExperience(artifacts);
 
@@ -61,7 +80,7 @@ describe('buildTraceExperience', () => {
     expect(experience.fullAttention.fidelity).toBe('DERIVED');
   });
 
-  it('projects all five exact decode steps from p4r4 validation', () => {
+  it('projects one prefill selection and four decode passes without conflating their fidelity', () => {
     const experience = buildTraceExperience(artifacts);
 
     expect(experience.decode.finalText).toBe('Hello, my name is [Your Name], and');
@@ -74,6 +93,19 @@ describe('buildTraceExperience', () => {
     ]);
     expect(experience.decode.steps[0].topCandidates[0]).toMatchObject({ tokenId: 498 });
     expect(experience.decode.steps[4].topCandidates[0]).toMatchObject({ tokenId: 321 });
+    expect(experience.decode.steps.map((step) => step.sourcePhase)).toEqual([
+      'prefill',
+      'decode',
+      'decode',
+      'decode',
+      'decode'
+    ]);
+    expect(experience.decode.steps.map((step) => step.logicalStepIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(experience.decode.steps[0].topCandidates).toHaveLength(20);
+    expect(experience.decode.steps[0]).toMatchObject({
+      logitsFidelity: 'SUMMARY',
+      selectionFidelity: 'EXACT'
+    });
     expect(experience.decode.fidelity).toBe('EXACT');
   });
 

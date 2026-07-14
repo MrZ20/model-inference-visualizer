@@ -37,6 +37,22 @@ beforeEach(() => {
   });
   vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
   vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+  const canvasContext = {
+    setTransform: vi.fn(),
+    clearRect: vi.fn(),
+    beginPath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    lineCap: 'round',
+    globalAlpha: 1,
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1
+  } as unknown as CanvasRenderingContext2D;
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(canvasContext);
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
     const name = new URL(String(input), 'http://localhost').pathname.split('/').at(-1)!;
     const fixture = fixtures[name];
@@ -53,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -72,7 +89,7 @@ describe('inference experience', () => {
 
   it('keeps Decode on the same light editorial canvas as the preceding chapters', async () => {
     render(Page);
-    await screen.findByRole('list', { name: 'Five decode steps' });
+    await screen.findByRole('list', { name: 'Generation decisions' });
 
     const decodeTheme = appCss.match(/\.decode-section\s*\{([^}]*)\}/s)?.[1] ?? '';
     expect(decodeTheme).toContain('background: #faf9ff');
@@ -108,6 +125,47 @@ describe('inference experience', () => {
     const runMode = screen.getByRole('group', { name: 'Run mode' });
     expect(within(runMode).getByRole('radio', { name: 'Continuous' })).toBeVisible();
     expect(within(runMode).getByRole('radio', { name: 'Single step' })).toBeVisible();
+  });
+
+  it('single-steps Overview through all six semantic stages without skipping', async () => {
+    render(Page);
+    await screen.findByRole('button', { name: 'Open model initialization' });
+    const flow = document.querySelector<HTMLElement>('.global-flow-experience')!;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Playback options' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'From current page' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Single step' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run one step' }));
+    expect(flow).toHaveAttribute('data-motion-progress', '0.167');
+    expect(flow).toHaveAttribute('data-active-stage', 'tokens');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Playback options' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'From current step' }));
+    const expected = [
+      ['0.333', 'embedding'],
+      ['0.500', 'transformer'],
+      ['0.667', 'logits'],
+      ['0.833', 'completion'],
+      ['1.000', 'completion']
+    ] as const;
+    for (const [motionProgress, stage] of expected) {
+      await userEvent.click(screen.getByRole('button', { name: 'Run one step' }));
+      expect(flow).toHaveAttribute('data-motion-progress', motionProgress);
+      expect(flow).toHaveAttribute('data-active-stage', stage);
+    }
+    expect(document.querySelector('.scene-status small')).toHaveTextContent('Cursor: Overview');
+  });
+
+  it('browses from a Global Flow stage without moving the Overview cursor', async () => {
+    render(Page);
+    const stage = await screen.findByRole('button', { name: 'Open model initialization' });
+    const flow = document.querySelector<HTMLElement>('.global-flow-experience')!;
+
+    await userEvent.click(stage);
+
+    expect(flow).toHaveAttribute('data-motion-progress', '0.000');
+    expect(document.querySelector('.scene-status strong')).toHaveTextContent('Initialize');
+    expect(document.querySelector('.scene-status small')).toHaveTextContent('Cursor: Overview · 0%');
   });
 
   it('single-steps from the visible page, then continues from that independent step', async () => {
@@ -281,11 +339,11 @@ describe('inference experience', () => {
     expect(layers.querySelectorAll('[title*="full_attention"]')).toHaveLength(10);
 
     expect(screen.getAllByText('Hello, my name is')).toHaveLength(2);
-    const decodeSteps = screen.getByRole('list', { name: 'Five decode steps' });
+    const decodeSteps = screen.getByRole('list', { name: 'Generation decisions' });
     expect(within(decodeSteps).getAllByRole('listitem')).toHaveLength(5);
     expect(within(decodeSteps).getAllByText('[1, 248320]')).toHaveLength(5);
-    expect(screen.getByText('7525')).toBeVisible();
-    expect(screen.getByText('321')).toBeVisible();
+    expect(within(decodeSteps).getByText('7525')).toBeVisible();
+    expect(within(decodeSteps).getByText('321')).toBeVisible();
   });
 
   it('keeps only one expanded scene open and supports collapse', async () => {

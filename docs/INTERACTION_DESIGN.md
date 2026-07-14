@@ -1,12 +1,12 @@
-# 交互与视觉规范（P5）
+# 交互与视觉规范（P6.10 当前状态）
 
-> 状态：融合视觉方向已确认；P6/P8 已按该方向重建并通过机器/浏览器审计，仍需用户产品/视觉验收
+> 状态：桌面 Global Flow 以根目录粒子方案为当前权威；核心实现已有机器证据，但用户指出视觉结果偏离方案，当前 Gate 未通过
 > 默认语言：English；支持 `EN / 中文` 即时切换
 > 参考：Transformer Explainer 的连续数据流、点击展开和长页面叙事；不复制其 GPT-2 信息结构
 
 ## 1. 一句话体验
 
-用户沿着一次真实的 Qwen3.5 推理向下滚动；主画布保持在视口中，数据连续地从权重、Token、矩阵和两张 NPU 卡流向下一个输出 Token。点击任一流程节点，镜头在同一画布内平滑放大到该节点的内部计算，再平滑返回全局流程。
+用户沿着一次真实的 Qwen3.5 推理向下滚动；首屏用一条宽屏 2.5D 管线展示数据从权重、Token、Embedding、40 层和 logits 流向输出。所有正文章节处于自然文档流；点击阶段只浏览对应章节，再由原位 Focus Scene 展开内部计算。
 
 网站不是图片轮播。底层轨迹由离散事件组成，但画面通过几何插值、颜色过渡和路径动画连续播放；不能直接采集的融合内核内部步骤只使用经过验证的 `DERIVED` 数据或明确的 `SCHEMATIC` 教学表达。
 
@@ -71,7 +71,7 @@
 | W8A8 | BF16 activation → per-token scale → INT8 matrix input → BF16 output |
 | TP=2 | replicated/sharded weights → Rank 0/1 local work → collective → merged result |
 | Logits | hidden state → vocabulary logits → top candidates → greedy token |
-| Decode | KV Cache reuse → one-token step ×5 → growing final text |
+| Decode | prefill logits selection ×1 → KV reuse decode ×4 → growing final text |
 
 ## 4. 信息层级
 

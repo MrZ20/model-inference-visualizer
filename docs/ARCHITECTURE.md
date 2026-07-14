@@ -1,7 +1,7 @@
-# 网站架构（P5 冻结方向 + P6/P8 实际实现）
+# 网站架构（P6.10 桌面 Global Flow 实际实现）
 
 > 状态：P5 技术架构与融合视觉稿已确认；P6 产品/视觉尚未通过用户验收。当前恢复入口见 `docs/project-context/README.md`
-> 日期：2026-07-10
+> 日期：2026-07-14
 > 发布运行：`qwen35-a3b-w8a8-20260710-p4r4`
 > 核心原则：静态网站只读取稳定轨迹，不依赖 vLLM Python 对象，不把静态图片轮播伪装成推理动画
 
@@ -36,9 +36,9 @@
 | 层 | 选择 | 用途 |
 |---|---|---|
 | 应用 | Svelte 5 + SvelteKit static adapter + TypeScript | 静态站、响应式状态和章节组合 |
-| 流程与矩阵 | 语义 DOM + CSS Grid + Tabler icons | 当前数据规模下保留按钮、region、矩阵和 rank lane 的可访问性 |
+| 流程与矩阵 | 语义 DOM + CSS Grid + 原生 SVG + Canvas 2D | DOM 承载事实与交互，SVG 承载流带，Canvas 承载确定性粒子 |
 | 动画 | `PlaybackEngine` + `requestAnimationFrame` + CSS interpolation | 连续章节进度、内容 stage、镜头和展开/收起 |
-| 密集数据 | 有界 DOM 切片/聚合 | 当前最大教学矩阵很小，不引入 Canvas；完整 tensor 不映射到 DOM |
+| 密集数据 | 有界 DOM 切片/聚合 + 粒子 Canvas | 完整 tensor 不映射到 DOM；Canvas 只表达有界的示意粒子 |
 | 样式 | CSS variables + Svelte scoped CSS | 双语、响应式、fidelity 和视觉 token |
 | 测试 | Vitest + Testing Library + 真实应用内浏览器 | Module Interface、页面点击、视口、内容动态和视觉证据 |
 
@@ -57,7 +57,7 @@
         -> TraceRepository
         -> PlaybackEngine
         -> SceneProjector
-        -> semantic DOM / CSS data views
+        -> semantic DOM / SVG ribbons / Canvas particles / CSS data views
 
 采集和编译已经在 P2–P4.2 完成。P6 不回到远端重新解释事件；前端只消费 `data/web/<run-id>`。
 
@@ -209,15 +209,21 @@ motion:    full | reduced
 - 顶栏、语言切换、播放控制、叙事文字、证据 drawer。
 - 可访问性、键盘焦点和语义按钮。
 
-### 当前未引入 SVG/Canvas
+### SVG
 
-当前发布数据只需要 5×5 Attention、40 层带、256 专家点阵、有界 sample 和两条 TP lane。语义 DOM/CSS 已满足性能与可访问性要求，因此没有为了匹配早期技术设想而引入 D3、GSAP 或 Canvas。若未来单场景超过约 400–1,500 个需要高频更新的单元，再以真实性、可访问性和性能数据决定 SVG/Canvas seam。
+Global Flow 的 5 条前向流带和 1 条 KV return loop 由原生 SVG 绘制。路径端点来自语义 DOM 的 anchor，经 `ResizeObserver` 在 mount、resize 和 locale 布局变化时重算；播放帧不读取 DOMRect。SVG 为装饰层，`aria-hidden=true` 且不阻挡点击。
+
+### Canvas
+
+Global Flow 使用一个 `aria-hidden` Canvas 绘制最多 140 个确定性粒子。粒子 plan 使用 trace 事实生成稳定 seed，位置只由 `projectParticleFrame(plan, geometry, frame)` 与 PlaybackEngine progress 决定；Pause/Seek/语言切换不会引入随机漂移。DPR 上限为 2，reduced motion 只返回静态 marker。
+
+Attention、MoE、TP 与其他文字/矩阵仍由有界语义 DOM/CSS 渲染；没有引入 D3、GSAP、Three.js 或统一 Renderer abstraction。
 
 原始矩阵很大时仍只展示 shape、统计、固定切片或聚合。完整 vocab 和完整权重永不映射为 DOM 节点。
 
 ## 7. 性能预算
 
-- 当前 P6 静态构建约 4.6 MB，其中完整发布 trace 约 4.0 MB；页面主 JS 约 149 KB、gzip 约 45 KB。
+- 当前 P6.10 静态构建仍以约 4 MB 发布 trace 为主体；主页面 JS 为 181.24 KB（gzip 55.81 KB），主 CSS 为 70.80 KB（gzip 15.98 KB）。
 - 当前实现启动时并行读取构建体验所需的 init/prefill/decode、validation、attention、MoE 和 TP 文件；尚未实现章节级懒加载，不得在报告中声称已经 lazy-load。
 - P7 生产优化可把 Overview/manifest 与深层 artifact 拆成按章节预取；是否实施以真实网络瀑布和目标部署环境为准。
 - 发布数据总量继续以当前约 4 MB 为基准，不无理由增加十倍。

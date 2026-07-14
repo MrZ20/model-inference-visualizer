@@ -392,3 +392,29 @@
 - 架构决定见 ADR-0008，完整证据见 `docs/reports/2026-07-13-p6.9-all-chapter-scroll-regression.md`。
 
 验收状态：机器与真实浏览器复验通过，等待用户实际滚动验收；P6 总 Gate 仍打开。
+
+### 30. 桌面首屏改为 2.5D 粒子推理流
+
+用户原话：
+
+> 现在要做一次大的重构和改变，前端设计不必再参考之前的了，但是压缩后依旧要读一遍设计文稿等本次任务相关内容，防止记忆丢失，方案设计已经写在model-inference-visualizer-desktop-particle-flow-agent-plan.md，开始执行任务
+
+客观复核：最新指令明确解除旧 P5 视觉稿对本轮首屏的具体约束，并把根目录新方案提升为桌面 Global Flow 的当前权威来源。真实数据、PlaybackEngine 单一时钟、Viewing/Cursor 解耦、滚动不中断、双语、可访问性与 fidelity 契约继续有效。
+
+形成的决定：本轮只重构桌面端首屏 Global Flow，使用连续 2.5D 张量管线、SVG 流带和确定性 Canvas 粒子；不重写后续 Focus Scene，不进入移动端或 P7。新方案加入压缩恢复清单，旧视觉稿只保留为历史上下文。
+
+真实性纠偏：真实 p4r4 的五个生成 Token 由一次 prefill 选择和四次 decode pass 产生。页面可展示五个生成决策，但 KV reuse 只对应后四次 decode，不能把第一枚 Token 误画成 decode forward。
+
+执行结果/证据：完成 Global Flow 数据模型与不变量、六阶段语义 DOM、SVG anchor/流带、确定性 Canvas 粒子、双语/Reduced Motion、页面集成和 Decode 1+4 最小纠偏。自动化为 11 files / 78 tests，Svelte check 与静态构建通过；桌面浏览器完成主要尺寸、点击、Pause、滚动、语言和 resize 测量。截图能力未提供可信的 1920×1080 原生 raster，也未提供 reduced-motion 系统模拟，已在本轮审计中明确保留为缺口。
+
+验收状态：机器可运行，但没有获得用户视觉验收。
+
+### 31. 停止非核心修补并等待进一步指正
+
+用户原话：
+
+> 不是核心问题就先不修复了，你已经偏离方案，我等会进行指正，先收尾吧
+
+客观复核：当时继续追查的是 completion fidelity 文案、无障碍描述完整度、Embedding sampleCount 文案和 Layer tooltip 本地化。这些不影响连续管线、粒子确定性、六阶段播放或 1+4 Decode 核心语义，属于非核心收尾项。
+
+形成的决定：立即回退刚加入的非核心补丁，停止继续优化或扩展浏览器证据；只完成必要的最终测试、证据命名纠正和连续性文档同步。当前视觉 Gate 记为未通过，等待用户下一轮明确指正，不进入移动端、P7、commit、push 或 deploy。

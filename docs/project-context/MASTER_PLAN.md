@@ -2,11 +2,15 @@
 
 > 这是压缩后用于恢复项目初衷的主方案。详细采集点和模块接口仍以 `docs/PROJECT_PLAN.md`、`docs/ARCHITECTURE.md` 和 ADR 为补充。
 >
-> 当前状态：P0–P5 数据、架构与视觉方向已完成；P6 三个纠偏切片、readiness、完成性审计、P6.5 页面/游标解耦、P6.6 滚动不中断、P6.7 Decode 浅色一致性和 P6.8/P6.9 全章节连续滚动已实现并通过机器/浏览器复验，等待用户实际操作验收。用户接受前不进入 P7。
+> 当前状态：既有 P6.5–P6.9 能力保留；P6.10 已按根目录新方案实现桌面 2.5D 粒子 Global Flow 核心。自动化通过，但用户明确指出视觉实现偏离方案，要求停止非核心修补并先收尾。产品/视觉 Gate 未通过，用户指正前不进入移动端或 P7。
+
+## 0. 当前桌面首屏权威
+
+`model-inference-visualizer-desktop-particle-flow-agent-plan.md` 是桌面 Global Flow 的当前权威方案。旧 `docs/assets/p5-fused-long-scroll-direction.png` 继续解释长页面与下游 Focus Scene 的历史方向，但不再限制首屏具体构图。任何后续修正必须先重读新方案和完整 manifest，并以用户下一条具体视觉反馈为准。
 
 ## 1. 北极星
 
-做一个基于真实 Qwen3.5-35B-A3B W8A8 / vLLM Ascend 轨迹的动态教学网页。读者应能看到一次推理从“进程和模型尚未 ready”开始，经过权重加载、Token、矩阵、40 层、Attention、MoE、Tensor Parallel、logits 和 5 次 Decode，最终得到文本。
+做一个基于真实 Qwen3.5-35B-A3B W8A8 / vLLM Ascend 轨迹的动态教学网页。读者应能看到一次推理从“进程和模型尚未 ready”开始，经过权重加载、Token、矩阵、40 层、Attention、MoE、Tensor Parallel、logits 和 5 个生成决策，最终得到文本；其中第一枚 Token 来自 prefill logits，后四枚才是 decode pass。
 
 网页不是模型在线运行器，而是可重复播放、可暂停、可单步、可点击深入的真实轨迹解释器。每个关键画面都能回答：
 
@@ -78,7 +82,7 @@ input token rows
 5. **Attention under the Microscope**：真实 Q/K/V 驱动的 16-head DERIVED attention 剧场。
 6. **MoE + W8A8**：router、top-8、256 experts、dispatch、per-token scale、GMM1/SwiGLU、GMM2、combine。
 7. **Tensor Parallelism**：TP=2 两条 rank 轨道、本地权重/激活、并行 span、collective 和合并结果。
-8. **Logits and Decode**：hidden → logits → top candidates → greedy token；KV reuse 与 5 次 Decode。
+8. **Logits and Decode**：hidden → logits → top candidates → greedy token；一次 prefill 选择与四次 Decode/KV reuse。
 9. **Evidence and Method**：真实性、数据来源、run provenance、限制与术语。
 
 ## 5. 已冻结的真实数据
@@ -177,7 +181,7 @@ Remote vLLM / vLLM Ascend / NPU
 | P4.1 | W8A8 / MoE / TP 补采 | 已完成 | 量化链与双 rank 齐全 |
 | P4.2 | DERIVED Attention | 已完成 | 与融合输出验证通过 |
 | P5 | 架构与融合视觉稿 | 已完成 | 用户确认长卷 + 矩阵剧场 + TP 双轨 |
-| P6 | 网站 MVP | **等待用户最终验收** | 三个纠偏 Slice、Linear/Full Attention、P6.5 播放策略、P6.6 滚动不中断、P6.7 Decode 浅色一致性和 P6.8/P6.9 全章节连续滚动已通过机器/浏览器检查；仍需用户亲自接受 |
+| P6 | 网站 MVP | **用户视觉 Gate 未通过** | 既有能力和 P6.10 粒子 Global Flow 核心已有机器证据；用户指出偏离方案并将继续指正 |
 | P7 | 发布 QA | 未开始 | 只有 P6 用户验收后才能进入 |
 
 每个大步骤结束后停下等待用户验收。用户曾特批 P2/P3/P4 合并，这不代表后续默认也可跨 Gate。
@@ -211,7 +215,7 @@ Remote vLLM / vLLM Ascend / NPU
 
 ### 数据
 
-- 40 层结构、linear/full attention、256 experts、top-8、TP spans、5 次 Decode 来自 `p4r4` 投影或明确结构数据。
+- 40 层结构、linear/full attention、256 experts、top-8、TP spans 和 1+4 生成决策来自 `p4r4` 投影或明确结构数据。
 - 缺少证据时测试失败，不退回静默硬编码。
 - Captured / Derived / Structural / Schematic 能被用户直接区分。
 
@@ -232,4 +236,4 @@ Remote vLLM / vLLM Ascend / NPU
 
 ## 13. 当前只允许的下一步
 
-请用户实际操作 `http://127.0.0.1:4175/?lang=en`，重点复验所有章节是否随滚轮连续移动，并同时确认 Decode 浅色一致性、页面切换不补完、三种开始起点、单步/连续以及运行中滚动不停。只有用户接受整体产品/视觉效果后，才能关闭 P6 Gate 并决定是否进入 P7；当前不重新采集、不连接 SSH、不 commit 或 push。
+停止实现，等待用户对当前桌面 Global Flow 偏离点的具体指正。收到指正后，只在明确范围内调整；不继续非核心审计项，不进入移动端/P7，不重新采集、不连接 SSH，也不 commit、push 或 deploy。

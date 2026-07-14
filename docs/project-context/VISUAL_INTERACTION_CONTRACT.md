@@ -1,12 +1,14 @@
 # 视觉与交互实现契约
 
-> 本文件把已选视觉方向从“灵感参考”提升为 P6 的实现基准。任何明显偏离都要先说明原因并获得用户确认，不能在上下文压缩后自由改成另一种页面。
+> 本文件继续约束长页面与下游 Focus Scene。桌面 Global Flow 的当前具体视觉权威已改为根目录 `model-inference-visualizer-desktop-particle-flow-agent-plan.md`；用户最新指出当前实现仍偏离该方案，视觉 Gate 未通过。
 
-## 1. 唯一选定视觉稿
+## 1. 历史视觉稿与当前首屏方案
 
 ![P5 fused long-scroll visual direction](../assets/p5-fused-long-scroll-direction.png)
 
-仓库资产：`docs/assets/p5-fused-long-scroll-direction.png`
+仓库资产：`docs/assets/p5-fused-long-scroll-direction.png`。它保留为历史上下文，不再是桌面 Global Flow 的具体目标。
+
+当前首屏必须是连续的 2.5D 张量管线与粒子流，由语义 DOM、SVG 流带和确定性 Canvas 粒子共同表达；它不是六张流程卡。具体阶段、时间映射、性能预算和 DoD 以根目录新方案为准。
 
 参考体验：
 
@@ -80,7 +82,7 @@
 - Attention 的 Q/K/V、scores、mask、softmax、weighted sum；
 - MoE router、top-8、dispatch、W8A8 scale 和 expert combine；
 - TP 两 rank 的 packet/span/local work 与 collective；
-- logits candidates、greedy 选择、KV reuse 和 5 次 Decode 文本增长。
+- logits candidates、greedy 选择、一次 prefill 选择、四次 Decode/KV reuse 和五个生成决策的文本增长。
 
 只有进度条、章节数字、按钮文案在变化，不算完成。
 

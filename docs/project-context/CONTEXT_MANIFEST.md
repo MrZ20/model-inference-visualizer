@@ -4,6 +4,7 @@
 
 ## 必读文件
 
+- [ ] `model-inference-visualizer-desktop-particle-flow-agent-plan.md`（当前桌面端 Global Flow 重构的最高优先级方案，必须完整读取）
 - [ ] `docs/project-context/README.md`
 - [ ] `docs/project-context/CHAT_TIMELINE.md`
 - [ ] `docs/project-context/MASTER_PLAN.md`
@@ -20,11 +21,12 @@
 - [ ] `docs/decisions/0006-separate-view-and-inference-cursor.md`
 - [ ] `docs/decisions/0007-independent-camera-follow-during-playback.md`
 - [ ] `docs/decisions/0008-natural-document-flow-for-chapters.md`
+- [ ] `docs/decisions/0009-deterministic-desktop-global-flow.md`
 - [ ] `web/AGENTS.md`（修改前端时）
 
 ## 必看资产
 
-- [ ] `docs/assets/p5-fused-long-scroll-direction.png`：已经选定的主视觉稿和页面构图基准。
+- [ ] `docs/assets/p5-fused-long-scroll-direction.png`：历史页面与 Focus Scene 视觉上下文；不再约束本轮桌面 Global Flow 的具体前端设计。
 - [ ] `data/web/qwen35-a3b-w8a8-20260710-p4r4/manifest.json`：当前发布轨迹入口。
 - [ ] `docs/reports/2026-07-12-p6-interaction-regression.md`：第一次错误验收。
 - [ ] `docs/reports/2026-07-13-p6-dynamic-playback-regression.md`：第二次错误验收。
@@ -36,6 +38,7 @@
 - [ ] `docs/audits/2026-07-13-p6-rebuild/AUDIT.md`：桌面重建后的真实浏览器与设计 QA。
 - [ ] `docs/audits/2026-07-13-p7-readiness/AUDIT.md`：390px、键盘、Evidence dialog 与 URL locale 的当前补充证据。
 - [ ] `docs/audits/2026-07-13-p8-completion/AUDIT.md`：原始要求逐项完成性证据与 Linear Attention 纠偏。
+- [ ] `docs/audits/2026-07-14-desktop-particle-global-flow/AUDIT.md`：本次桌面粒子 Global Flow 的实现、证据缺口与未通过用户验收的 Gate。
 
 ## 必做仓库检查
 

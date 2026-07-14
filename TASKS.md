@@ -231,6 +231,24 @@
 
 **Gate P6.9**：机器与真实浏览器证据已满足；所有章节均随文档连续移动。P6 总 Gate 仍需用户实际滚动验收。
 
+### P6.10：桌面 2.5D 粒子 Global Flow
+
+- [x] 将根目录新方案加入压缩恢复清单并完整读取。
+- [x] 建立 `buildGlobalFlowModel()` 与关键数据不变量，删除首屏 run 事实硬编码。
+- [x] 用六阶段语义 DOM 表达 shards、Token、Embedding、40 层、logits 和 completion。
+- [x] 用 DOM anchors + ResizeObserver + SVG 绘制前向流带和 KV return loop。
+- [x] 用稳定 seed 和纯 progress 投影确定性 Canvas 粒子，DPR≤2、总量≤140。
+- [x] 保持 PlaybackEngine 单时钟、Viewing/Cursor、3×2 开始策略、滚动不中断和双语。
+- [x] 纠正为 1 次 prefill selection + 4 次 decode/KV reuse；pending layer/decision 不提前 active。
+- [x] 增加 Global Flow model、particle、geometry、component 和完整六步页面回归。
+- [x] 运行 11 files / 78 tests、Svelte check 和 static build。
+- [x] 纠正截图实际 JPEG 扩展名和错误的 1920×1080 文件名。
+- [x] 新增 ADR-0009、本轮审计并同步上下文文档。
+- [ ] 用户接受桌面 Global Flow 的视觉与产品方向。
+- [ ] 原生 1920×1080、系统 reduced-motion 和正式性能证据；只有用户确认继续当前方向后再补。
+
+**Gate P6.10**：**未满足**。核心技术路径可运行，但用户明确指出实现偏离方案并要求停止非核心修补。当前任务收尾后等待指正，不进入移动端、P7、commit、push 或 deploy。
+
 ## P7：QA 与交付
 
 - [ ] 数据事实复核。

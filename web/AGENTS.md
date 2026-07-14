@@ -10,8 +10,9 @@ When implementing from a selected generated mock, treat that image as the source
 
 ## Project-specific decisions
 
-- Selected visual target: `../docs/assets/p5-fused-long-scroll-direction.png`.
+- Active desktop Global Flow target: `../model-inference-visualizer-desktop-particle-flow-agent-plan.md`; the former P5 image is historical context, not the target for this component.
 - Build a long, full-width scrollytelling page, not a compact dashboard or slideshow.
+- The desktop Global Flow uses a continuous 2.5D tensor pipeline with semantic DOM, decorative SVG ribbons and a deterministic Canvas particle layer. `PlaybackEngine` progress is its only time source.
 - English is the default; `EN / 中文` must switch all interface copy without resetting playback or focus state.
 - Scroll, play/pause, previous/next and chapter navigation are coordinated by one PlaybackEngine, but the visible page and inference cursor are independent state: browsing must never complete or reset a scene.
 - The start control must preserve three origins (beginning/current page/current step) and two modes (continuous/single semantic step). Wheel, touch, non-programmatic scrolling and chapter browsing take over the camera without pausing continuous playback; an explicit start restores camera follow.

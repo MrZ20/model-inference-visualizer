@@ -1,11 +1,21 @@
 <script lang="ts">
-  export let matrix: number[][];
+  export let matrix: Array<Array<number | null>>;
   export let labels: string[] = [];
   export let activeRow = matrix.length - 1;
   export let accent: 'coral' | 'blue' = 'blue';
+  export let valueKind: 'probability' | 'score' = 'probability';
+
+  $: finiteValues = matrix.flat().filter((value): value is number => typeof value === 'number');
+  $: minimum = Math.min(...finiteValues);
+  $: maximum = Math.max(...finiteValues);
+  $: normalized = (value: number | null) => value === null
+    ? 0
+    : valueKind === 'probability'
+      ? value
+      : (value - minimum) / Math.max(maximum - minimum, Number.EPSILON);
 </script>
 
-<div class="matrix-wrap" aria-label="Attention probability matrix">
+<div class="matrix-wrap" aria-label={valueKind === 'probability' ? 'Attention probability matrix' : 'Attention score matrix'}>
   {#if labels.length}
     <div class="labels top" style={`--count:${labels.length}`}>
       {#each labels as label}<span>{label}</span>{/each}
@@ -16,8 +26,8 @@
     <div class="matrix" style={`--columns:${matrix[0]?.length ?? 1}`}>
       {#each matrix as row, rowIndex}
         {#each row as value}
-          <div class:active={rowIndex === activeRow} class:masked={value === 0} class:coral={accent === 'coral'} class="cell" style={`--value:${value}`}>
-            <span>{value ? value.toFixed(2) : '—'}</span>
+          <div class:active={rowIndex === activeRow} class:masked={value === null || (valueKind === 'probability' && value === 0)} class:coral={accent === 'coral'} class="cell" style={`--value:${normalized(value)}`}>
+            <span>{value === null ? '—' : valueKind === 'score' ? value.toFixed(1) : value === 0 ? '—' : value.toFixed(2)}</span>
           </div>
         {/each}
       {/each}

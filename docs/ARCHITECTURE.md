@@ -1,6 +1,6 @@
-# 网站架构冻结（P5）
+# 网站架构（P5 冻结方向 + P6/P8 实际实现）
 
-> 状态：技术架构已冻结；融合视觉稿等待用户最终验收
+> 状态：P5 技术架构与融合视觉稿已确认；P6 产品/视觉尚未通过用户验收。当前恢复入口见 `docs/project-context/README.md`
 > 日期：2026-07-10
 > 发布运行：`qwen35-a3b-w8a8-20260710-p4r4`
 > 核心原则：静态网站只读取稳定轨迹，不依赖 vLLM Python 对象，不把静态图片轮播伪装成推理动画
@@ -26,7 +26,7 @@
 - 一次真实推理从进程初始化播放到 5 个输出 token。
 - 底层是离散语义事件，视觉通过插值形成连续动画。
 - 点击节点在同一画布内展开内部步骤，不切换为静态图片。
-- 页面采用纵向 scrollytelling + 近全屏 sticky 画布，不做单屏仪表盘。
+- 页面采用纵向 scrollytelling + 全宽自然文档流，不做单屏仪表盘；顶部播放控制保持固定。
 - UI 默认 English，完整支持 `EN / 中文` 切换。
 - 所有视觉数据保留 `EXACT / SUMMARY / DERIVED / STRUCTURAL / SCHEMATIC`。
 - 无 SSH、NPU、后端或模型权重时仍可完整运行。
@@ -36,11 +36,11 @@
 | 层 | 选择 | 用途 |
 |---|---|---|
 | 应用 | Svelte 5 + SvelteKit static adapter + TypeScript | 静态站、响应式状态和章节组合 |
-| 流程图 | SVG + D3 scales/layout helpers | 可点击节点、路径、标签和小矩阵 |
-| 动画 | GSAP timeline | 连续路径、几何、透明度和展开/收起 |
-| 密集数据 | Canvas 2D | 大 heatmap、直方图和 tensor cloud |
-| 样式 | CSS variables + scoped CSS/Sass | 双语、响应式和视觉 token |
-| 测试 | Vitest + Playwright | 深 Module 的 Interface 与关键交互 |
+| 流程与矩阵 | 语义 DOM + CSS Grid + Tabler icons | 当前数据规模下保留按钮、region、矩阵和 rank lane 的可访问性 |
+| 动画 | `PlaybackEngine` + `requestAnimationFrame` + CSS interpolation | 连续章节进度、内容 stage、镜头和展开/收起 |
+| 密集数据 | 有界 DOM 切片/聚合 | 当前最大教学矩阵很小，不引入 Canvas；完整 tensor 不映射到 DOM |
+| 样式 | CSS variables + Svelte scoped CSS | 双语、响应式、fidelity 和视觉 token |
+| 测试 | Vitest + Testing Library + 真实应用内浏览器 | Module Interface、页面点击、视口、内容动态和视觉证据 |
 
 不引入 ONNX Runtime Web：Qwen3.5 不在浏览器中计算，网站只回放已验证轨迹。
 
@@ -57,7 +57,7 @@
         -> TraceRepository
         -> PlaybackEngine
         -> SceneProjector
-        -> DOM / SVG / Canvas views
+        -> semantic DOM / CSS data views
 
 采集和编译已经在 P2–P4.2 完成。P6 不回到远端重新解释事件；前端只消费 `data/web/<run-id>`。
 
@@ -104,8 +104,11 @@ export interface PlaybackEngine {
 
 Implementation 隐藏：
 
-- play/pause、速度、seek、step 和 chapter 跳转；
-- scroll 进度与自动播放的冲突解决；
+- play/pause、速度、seek、语义单步和连续播放；
+- `viewChapter`（正在浏览的页面）与 `chapter/progress`（推理游标）的正交状态；
+- `progressByChapter` 中各场景真实执行进度，页面跳转不能反向补完；
+- 从头、从当前页面、从当前步骤三种显式 `START` 策略；
+- wheel、touch、滚动条与自动镜头的优先级解决；
 - 离散事件到连续 `0..1` progress 的插值；
 - `overview -> expanding -> detail -> collapsing`；
 - reduced motion；
@@ -173,18 +176,23 @@ DOM、SVG 和 Canvas 承担不同职责，并不是可互换 Adapter。为它们
       -> logits + decode
       -> evidence
 
-章节容器约 160–240vh；主画布 sticky 在视口中。滚动只改变 `PlaybackEngine` 的语义 progress，不能让各章节维护独立时间。
+章节高度由实际内容决定，主画布随文档自然移动，不再用 sticky 跑道制造停留。手动滚动只改变 `viewChapter` 并关闭自动镜头跟随，不修改或暂停推理游标；连续播放和正文动画保持运行。再次显式开始时镜头恢复跟随推理游标。各场景进度仍由同一个 `PlaybackEngine` 维护，组件不能拥有自己的全局时间线。
 
 ### 5.2 正交状态
 
 ```text
 transport: loading | ready | playing | paused | completed | error
-chapter:   init | tokenization | prefill | attention | moe | tp | decode | evidence
+view:      overview | init | tokenization | prefill | attention | moe | tp | decode
+cursor:    overview | init | tokenization | prefill | attention | moe | tp | decode
+origin:    beginning | page | step
+run:       continuous | single
 focus:     overview | expanding | detail | collapsing
 mode:      story | explore
 locale:    en | zh-CN
 motion:    full | reduced
 ```
+
+`single` 不是固定毫秒 seek，而是推进当前场景的一个语义阶段；例如 Attention 为六阶段、TP 为七阶段、Decode 为五阶段。详见 ADR-0006。
 
 ### 5.3 连续性的真实含义
 
@@ -201,25 +209,18 @@ motion:    full | reduced
 - 顶栏、语言切换、播放控制、叙事文字、证据 drawer。
 - 可访问性、键盘焦点和语义按钮。
 
-### SVG
+### 当前未引入 SVG/Canvas
 
-- 当前场景最多约 1,500 个可交互节点。
-- 流程连线、小型矩阵、Token、rank 分片和合并点。
-- 需要 hover、focus、标签或路径动画的数据。
+当前发布数据只需要 5×5 Attention、40 层带、256 专家点阵、有界 sample 和两条 TP lane。语义 DOM/CSS 已满足性能与可访问性要求，因此没有为了匹配早期技术设想而引入 D3、GSAP 或 Canvas。若未来单场景超过约 400–1,500 个需要高频更新的单元，再以真实性、可访问性和性能数据决定 SVG/Canvas seam。
 
-### Canvas
-
-- 超过约 400 个单元的 heatmap/tensor cloud。
-- 不需要逐格 DOM 语义的密集可视化。
-- hover 通过坐标反查数据，不创建每格 DOM。
-
-原始矩阵很大时只展示 shape、统计、固定切片或聚合。完整 vocab 和完整权重永不映射为 DOM 节点。
+原始矩阵很大时仍只展示 shape、统计、固定切片或聚合。完整 vocab 和完整权重永不映射为 DOM 节点。
 
 ## 7. 性能预算
 
-- 首屏只加载 manifest 与 overview，压缩后目标不超过 350 KB。
-- attention、MoE、TP 和 decode artifact 按章节懒加载。
-- 发布数据总量以当前约 4 MB 为基准，不在 P6 无理由增加十倍。
+- 当前 P6 静态构建约 4.6 MB，其中完整发布 trace 约 4.0 MB；页面主 JS 约 149 KB、gzip 约 45 KB。
+- 当前实现启动时并行读取构建体验所需的 init/prefill/decode、validation、attention、MoE 和 TP 文件；尚未实现章节级懒加载，不得在报告中声称已经 lazy-load。
+- P7 生产优化可把 Overview/manifest 与深层 artifact 拆成按章节预取；是否实施以真实网络瀑布和目标部署环境为准。
+- 发布数据总量继续以当前约 4 MB 为基准，不无理由增加十倍。
 - 常规动画目标 60 fps；密集章节不得长期低于 30 fps。
 - 每帧 JS 主线程工作目标小于 12 ms；避免每帧触发布局测量。
 - 动画优先修改 transform、opacity、SVG attributes 和 Canvas buffer。
@@ -246,6 +247,7 @@ AppShell
   InitializationScene
   TokenizationScene
   LayerOverviewScene
+  LinearAttentionScene
   AttentionFocusScene
   MoeQuantizationScene
   TensorParallelScene
@@ -289,12 +291,12 @@ web/
 |---|---|
 | 运行模式 | 预录真实轨迹 + 静态回放 |
 | 动画 | 离散事件驱动的连续插值，不使用图片轮播 |
-| 页面 | 纵向 scrollytelling + 全宽 sticky 画布 |
+| 页面 | 纵向 scrollytelling + 全宽自然文档流；固定播放顶栏 |
 | 详情 | 点击节点在同一画布连续展开/收起 |
 | 视觉融合 | 全局长卷 + 矩阵剧场 + TP 双轨章节 |
 | 默认语言 | English，完整支持中文切换 |
 | 前端 | Svelte 5 / SvelteKit static / TypeScript |
-| 渲染 | DOM + SVG/D3 + Canvas；GSAP 负责时间线 |
+| 渲染 | 当前实现为语义 DOM/CSS；`requestAnimationFrame` 驱动共享时间线 |
 | 数据 | `qwen35-a3b-w8a8-20260710-p4r4` |
 | 实时 NPU | 第一版排除 |
 

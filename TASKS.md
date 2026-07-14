@@ -115,8 +115,121 @@
 - [x] 实现 logits/sampling/decode 视图。
 - [x] 实现 tensor inspector、证据面板和术语表。
 - [x] 实现错误态、加载态、reduced motion 和键盘控制。
+- [x] 增加 Attention/MoE/TP 页面级点击与展开/收起回归测试。
+- [x] 增加 `p4r4` 40 层、线性/全注意力和 Decode 场景模型 UT。
+- [x] 用完整 256 专家视图替换 32 个示意节点，并校验真实 top-8。
+- [x] 修复开始播放、末尾重播、章节自动镜头与手动滚动接管。
+- [x] 让权重加载、token/embedding、QKV、MoE、TP 和 Decode 由共享播放进度驱动。
+- [x] 增加正文运动进度断言，并用真实浏览器验证按钮 hit-test 与详情 viewport 相交。
 
-**Gate P6**：已满足——可从初始化播放到最终文本，关键交互、双语和数据证据均可用；等待用户验收后进入 P7。
+**Gate P6**：**未满足用户最终验收**——上下文恢复、视觉差异审计、三个纠偏 Slice、响应式/a11y 补强、自动化和真实浏览器验证均已完成，但机器证据不能替代用户亲自操作后的产品/视觉接受；不得把当前状态写成最终完成。
+
+### P6.1：上下文与视觉重新对齐
+
+- [x] 建立可审计的用户需求/对话时间线。
+- [x] 建立完整总方案和视觉交互实现契约。
+- [x] 建立压缩后的强制恢复协议和根级 `AGENTS.md`。
+- [x] 将 `MEMORY.md` 降级为快速摘要，修正 P6 验收状态。
+- [x] 用户验收上下文档案。
+- [x] 对当前页面与选定视觉稿做截图化差异审计。
+- [x] 按审计结果修复构图、连续动态和 Focus Scene 体验。
+- [x] 通过自动化与真实浏览器验收。
+- [ ] 通过用户实际操作验收。
+
+审计证据：`docs/audits/2026-07-13-p6-visual-realignment/AUDIT.md`。
+
+### P6.2：分片实现顺序
+
+- [x] Slice 1：Shell + Global Flow + Playback。
+- [x] Slice 2：Initialization + Attention Focus Scene。
+- [x] Slice 3：MoE/W8A8 + TP + Decode + bilingual/a11y。
+
+用户已授权三个 Slice 连续实施。本轮已经完成参考图同屏对照、页面级测试和真实浏览器检查；只有最终用户产品/视觉 Gate 仍保持打开。
+
+### P6.3：验收前 readiness 补强
+
+- [x] 390px 使用摘要式布局，Attention/MoE/TP 展开入口保持在章节落点视口内。
+- [x] Focus 宽矩阵只在自身 labelled region 横向滚动，不产生全局页面溢出。
+- [x] Evidence 使用 modal dialog 语义、打开聚焦 Close、Escape 关闭并恢复触发器焦点。
+- [x] 中文 Evidence provenance/fidelity 说明完整本地化。
+- [x] 显式 URL locale 优先于保存的语言偏好。
+- [x] 增加页面级键盘、dialog、双语与 locale 优先级回归测试。
+- [x] 在 1280×720 和 390×844 真实浏览器验证，固化当前轮截图。
+
+补充证据：`docs/audits/2026-07-13-p7-readiness/AUDIT.md`。这一步只修复已有体验的验收缺口，不代表 P7 正式交付已开始。
+
+### P6.4：原始要求完成性审计
+
+- [x] 逐项把原始要求映射到页面、真实数据、测试与浏览器证据。
+- [x] 纠正“只有 30/10 类型计数即视为完成 Linear Attention 代表层”的弱证据。
+- [x] 使用 p4r4 Layer 0 真实输入/输出的受控样本与统计构建 Gated DeltaNet 六阶段 Focus Scene。
+- [x] 将 QKVZBA projection、Causal Conv1D、Gated Delta recurrence、gated norm/out projection 标记为 Structural，把内部状态运动标记为 Schematic。
+- [x] 桌面与 390px 均同时展示 Linear/Full Attention 入口，局部宽画布不造成全局溢出。
+- [x] 补充页面点击、阶段跳转、focus exclusivity 与引擎 DetailId 回归测试。
+- [x] 修复 Attention 默认热力图缺失 `--blue` token 的视觉退化。
+- [x] 将 Linear 边界摘要与完整 Captured 值分开标记，并补齐 Evidence 中的 Summary 定义。
+- [x] 修复 Focus Scene 关闭动画中快速重新打开会再次被关闭的竞态，并增加页面回归。
+- [x] 固化 7 files / 29 tests、4.6 MB 静态构建和真实浏览器截图。
+
+完成性证据：`docs/audits/2026-07-13-p8-completion/AUDIT.md`。工程要求已有逐项直接证据，但用户产品/视觉 Gate 仍保持打开。
+
+### P6.5：播放起点、页面/步骤解耦与滚动控制
+
+- [x] 用页面回归证明切换可视章节不会把旧章节进度补到 100%。
+- [x] 将当前可视章节与推理播放游标拆成两个状态。
+- [x] 开始入口支持从头开始、从当前页面开始、从当前步骤继续。
+- [x] 支持单步与连续两种执行方式。
+- [x] wheel/touch/非程序化滚动时自动暂停连续播放。
+- [x] 复核用户第 1 点所指的轻微切换异常，不编造被截断的现象；已修复可复现的进度补完与状态/滚动竞争，具体残余现象等待用户补充。
+- [x] 通过页面级测试、7 files / 41 tests、完整构建和 1280×720 真实浏览器复验。
+
+**Gate P6.5**：机器与浏览器证据已满足；页面和步骤状态可独立变化，开始策略可预测，滚动接管有效。用户再次验收前仍不关闭 P6 产品 Gate。
+
+### P6.6：播放期间自由滚动
+
+- [x] 先用引擎和页面回归复现：手动浏览会暂停 transport，播放帧会覆盖手动选择的页面。
+- [x] 连续播放开始时保持自动镜头跟随。
+- [x] wheel、touch、滚动条和章节浏览只接管镜头，不暂停推理游标或正文动画。
+- [x] 手动接管后不被后续播放帧拉回；显式开始可重新启用自动跟随。
+- [x] 用真实浏览器证明 `scrollY` 变化期间 transport 仍在 playing，scene progress 持续增加。
+- [x] 更新 ADR、交互契约、memory 和 P6.6 验收报告。
+
+**Gate P6.6**：机器与真实浏览器证据已满足；用户最新要求已取代 P6.5 的滚动自动暂停决定。P6 总 Gate 仍需用户实际操作验收。
+
+### P6.7：Decode 视觉一致性
+
+- [x] 建立回归，禁止 Decode 整章使用与前文相反的深色主题。
+- [x] 统一 Decode 章节、logits、sampling、KV cache 和五步卡片的浅色背景、边框与文字层级。
+- [x] 保持精确 token、logits、KV cache、最终文本和播放动画不变。
+- [x] 运行完整测试、Svelte 检查和静态构建。
+- [x] 用新构建真实浏览器对比 Decode 与前一章节的计算样式。
+- [x] 更新上下文、memory 与 P6.7 验收报告。
+
+**Gate P6.7**：机器与真实浏览器证据已满足；Decode 已恢复全站浅色编辑语言。P6 总 Gate 仍需用户实际视觉验收。
+
+### P6.8：Initialize/Tokenize 连续滚动
+
+- [x] 用真实浏览器区分文档滚动、动态内容撑高和 sticky 画面停留。
+- [x] 建立短章节布局回归，并在修复前得到 1 failed / 20 passed。
+- [x] 仅取消 Initialize/Tokenize 的 `145vh` 高度下限和 sticky 定位。
+- [x] 保留 Prefill、Attention、MoE、TP、Decode 的长章节聚焦行为。
+- [x] 通过 7 files / 45 tests、Svelte check 和静态构建。
+- [x] 用最新 4175 构建证明两章 `scrollDelta 260 / visualDelta -260`，播放不中断且 Viewing 可继续进入 Prefill。
+- [x] 更新上下文、memory 与 P6.8 验收报告。
+
+**Gate P6.8**：机器与真实浏览器证据已满足；Initialize/Tokenize 不再产生可见 sticky 停滞。P6 总 Gate 仍需用户实际滚动验收。
+
+### P6.9：全章节连续滚动
+
+- [x] 客观确认剩余章节仍继承公共 `145vh + sticky` 规则。
+- [x] 将页面回归提升为所有正文章节的自然文档流契约，并在修复前得到 1 failed / 20 passed。
+- [x] 公共章节改为自然高度、公共主画布改为 relative；删除 P6.8 临时例外。
+- [x] 保持 Focus 展开、播放、camera takeover、正文动画与真实数据不变。
+- [x] 通过 7 files / 45 tests、Svelte check 和静态构建。
+- [x] 在最新 4175 构建确认所有章节为 relative，Attention/TP/Decode 均 `scrollDelta 180 / visualDelta -180`。
+- [x] 更新 ADR-0008、上下文、memory 与 P6.9 验收报告。
+
+**Gate P6.9**：机器与真实浏览器证据已满足；所有章节均随文档连续移动。P6 总 Gate 仍需用户实际滚动验收。
 
 ## P7：QA 与交付
 

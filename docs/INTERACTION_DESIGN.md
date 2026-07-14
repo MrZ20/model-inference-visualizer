@@ -1,6 +1,6 @@
 # 交互与视觉规范（P5）
 
-> 状态：融合方向已确认，等待视觉稿最终验收
+> 状态：融合视觉方向已确认；P6/P8 已按该方向重建并通过机器/浏览器审计，仍需用户产品/视觉验收
 > 默认语言：English；支持 `EN / 中文` 即时切换
 > 参考：Transformer Explainer 的连续数据流、点击展开和长页面叙事；不复制其 GPT-2 信息结构
 
@@ -24,7 +24,7 @@
 8. `Logits and Decode`
 9. `Evidence and Method`
 
-每个核心章节占约 160–240vh，内部包含一个接近 100vh 的 sticky 主画布和一条简短叙事轨。进入下一章节时，画布连续变形而不是整页闪切。
+每个核心章节按真实内容自然展开，主画布随文档连续移动，不再用固定的 160–240vh sticky 跑道。进入下一章节时仍保持同页连续叙事，不整页闪切。
 
 ### 宽度策略
 
@@ -38,13 +38,17 @@
 
 ### 3.1 全局播放
 
-滚动、播放按钮和时间线操作同一份播放状态：
+滚动、播放按钮和时间线由同一个 `PlaybackEngine` 协调，但可视页面和推理游标是两个正交状态：
 
-- 滚动：浏览故事并控制章节内进度。
-- `Play / Pause`：自动沿当前章节播放。
-- `Previous / Next`：跳到相邻语义事件，而不是跳到下一张图片。
+- 滚动：只浏览故事；wheel、touch、滚动条或章节导航接管时关闭自动镜头跟随，但连续推理与正文动画不暂停，也不篡改推理进度。
+- `Previous / Next`：只切换相邻页面，推理游标保持原位。
+- 开始位置：从头开始、从当前页面 0% 开始、从当前推理步骤继续。
+- 执行方式：连续模式可跨章节；单步模式只推进当前场景的一个语义阶段。
+- 连续播放：镜头自动跟随推理游标；手动滚动后镜头不再抢回控制权。
 - 时间线：在初始化、Prefill、Decode 和最终输出之间定位。
 - `0.5× / 1× / 2×`：只改变动画速度，不改变真实耗时标签。
+
+顶栏同时显示 `Viewing` 和 `Cursor`。仅浏览另一页面不得把旧页面补到完成态；点击具体层、Focus stage 或显式开始策略才可以改变推理游标。
 
 ### 3.2 Focus Scene
 
@@ -60,7 +64,8 @@
 |---|---|
 | Weight loading | checkpoint shards → parameter names → TP shard assignment → NPU memory |
 | Tokenization | text spans → token strings → IDs → embedding rows |
-| 40 layers | 40 层总览 → 代表层 3 → Attention/MoE 内部 |
+| 40 layers | 40 层总览 → Layer 0 Gated DeltaNet / Layer 3 Full Attention → MoE 内部 |
+| Linear Attention | captured `[5, 2048]` input → QKVZBA projection → Causal Conv1D → Gated Delta recurrence → gated norm/out projection → captured output |
 | Attention | Q/K/V → QKᵀ → scale/mask → softmax → weighted sum |
 | MoE | router logits → top-8 experts → dispatch → GMM1/SwiGLU → GMM2 → combine |
 | W8A8 | BF16 activation → per-token scale → INT8 matrix input → BF16 output |

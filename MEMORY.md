@@ -1,13 +1,13 @@
-# 项目 Memory
+# 项目 Memory（快速摘要）
 
-> 这是项目的长期对齐文件。每完成一个阶段、做出一个架构决策、发现一个事实变化或发生一次偏离，都必须更新本文件。
+> 本文件只提供快速摘要，不能单独恢复完整需求。对话压缩、会话恢复或重大修改前，必须按 `docs/project-context/CONTEXT_MANIFEST.md` 重读完整时间线、总方案、视觉交互契约、当前状态与恢复协议。
 
 ## 1. 当前状态
 
-- 日期：2026-07-12
-- 当前阶段：P6 网站 MVP 已完成
-- 当前状态：SvelteKit 静态站、真实轨迹加载、连续播放器、长页面、三类 Focus Scene、双语、证据面板和张量检查器均已实现并通过浏览器验收
-- 下一阶段门：用户验收 P6 后进入 P7 数据事实、移动端、性能、许可、脱敏与交付终检
+- 日期：2026-07-13
+- 当前阶段：P6.9 全章节连续滚动已实现，等待用户实际操作验收
+- 当前状态：Shell/Global Flow、Initialization、Linear/Full Attention、MoE/TP/Decode、双语与 a11y 已按选定视觉契约重建；Viewing/Cursor 独立、3 种起点 × 2 种模式、transport/camera-follow 解耦、统一浅色 Decode 和全章节自然滚动已补齐；7 files / 45 tests、4.6 MB 静态构建和真实浏览器复验通过
+- 下一阶段门：用户接受当前页面后关闭 P6 产品/视觉 Gate；此前不得进入 P7
 - 当前仓库：`/Users/user/work/MrZ20_1/model-inference-visualizer`
 
 ## 2. 北极星
@@ -99,13 +99,22 @@
 | D-014 | EP=false 时将 MoE 两 rank group 解释为复用 TP group | 已确认 | 避免把通信 group world size 误画成独立 EP2 |
 | D-015 | 使用完整真实 Q/K/V 离线重建 attention 热力图 | 已确认 | 不修改 CANN 内核也能得到流程正确、由融合输出验证的教学数据 |
 | D-016 | 离散轨迹事件通过语义插值形成连续动画 | 已确认 | 画面连贯，但不伪称采集了内核每个微步骤 |
-| D-017 | 使用纵向 scrollytelling + 全宽 sticky 主画布 | 已确认 | 避免把大量信息压进 A4/仪表盘式单屏 |
+| D-017 | 使用纵向 scrollytelling + 全宽 sticky 主画布 | 已被 D-032 部分取代 | 长页面和全宽方向保留；章节 sticky 被用户最新滚动要求取消 |
 | D-018 | 点击节点在同一画布进入 Focus Scene 并连续展开/收起 | 已确认 | 支持从全局流程深入矩阵、MoE、W8A8 和 TP，而非图片切换 |
 | D-019 | English 为默认 UI，完整支持 `EN / 中文` 切换 | 已确认 | 与源码术语一致，同时保留中文教学；切换不能重置播放状态 |
 | D-020 | 前端采用 Svelte 5/SvelteKit static 与 TypeScript，P6 以 DOM/CSS/SVG 和 requestAnimationFrame 为主 | 已实现 | 当前矩阵规模很小，无需引入 Canvas；D3/GSAP 留到数据或编排复杂度确实需要时再添加 |
 | D-021 | 三个视觉稿融合为全局长卷、局部矩阵剧场和 TP 双轨章节 | 已确认 | 三者是同一页面的不同缩放层级，不是三套页面 |
 | D-022 | PlaybackEngine、TraceRepository、SceneProjector 与 LocaleCatalog 保持独立可测试模块 | 已实现 | 页面只消费稳定接口，轨迹读取、时间推进、投影和文案可分别验证 |
 | D-023 | P6 动画由 requestAnimationFrame、CSS 插值和滚动观察器共同驱动 | 已实现 | 真实轨迹是离散事件，但界面可连续播放且不伪造新的采集值 |
+| D-024 | 可点击 Focus Scene 必须有真实页面组件测试；trace 事实必须通过 `buildTraceExperience` | 已实现 | 防止底层 UT 全绿但页面不可见，缺失证据时直接失败而不是退回硬编码 |
+| D-025 | 动态播放必须同时驱动正文画面和镜头；点击验收必须验证命中与视口相交 | 已实现 | 进度条变化、DOM 存在或程序化 click 成功都不能证明用户实际看到了动态内容 |
+| D-026 | 使用 `docs/project-context/` 作为压缩后的完整恢复入口，`MEMORY.md` 仅作摘要 | 已确认 | 旧 memory 未保存视觉缘由、对话转折和强制恢复顺序，无法独立防止偏离 |
+| D-027 | Decode 的 logits、selected token、KV cache 与步骤卡必须表示同一次生成决策 | 已实现 | 浏览器验收发现完成第 N 枚 token 时 logits 曾提前显示 N+1；语义一致性比动画提前预览更重要 |
+| D-028 | 可视页面与推理游标必须分离，开始策略显式选择起点和单步/连续 | 已实现 | 章节浏览不应补完旧页，详见 ADR-0006 |
+| D-029 | 连续推理 transport 与 camera follow 独立 | 已实现 | 用户最新要求运行中可滚动且不暂停；人工浏览只接管镜头，详见 ADR-0007 |
+| D-030 | Decode 沿用全站浅色编辑表面，不使用独立黑色主题 | 已实现 | 用户指出最后一页与前文风格不一致；数据卡使用共享 paper/line/indigo/mint 变量 |
+| D-031 | Initialize/Tokenize 不使用长章节 sticky 跑道 | 已被 D-032 扩展 | P6.8 先修复两章，随后用户要求推广到所有章节 |
+| D-032 | 所有正文章节使用自然文档流，不使用 sticky 跑道 | 已实现 | 用户确认其他章节也有同类可见停滞；详见 ADR-0008 |
 
 确认后的决策要转写为 `docs/decisions/` 中的 ADR；本表保留摘要。
 
@@ -157,6 +166,18 @@
 | 2026-07-10 | 从三个 1440×1024 单屏方向中选择一个 | 融合为长页面 scrollytelling、点击连续展开、矩阵 Focus Scene 和 TP 双轨章节 | 用户指出单屏信息臃肿，并要求参考项目源码中的真实动态交互 | 已确认 | P5 增加交互规范与 ADR；视觉稿验收后再 scaffold |
 | 2026-07-10 | 中文为主、术语双语 | 改为 English 默认并支持完整 `EN / 中文` 切换 | 用户明确要求网站整体先使用英文 | 已确认 | trace 保持语言无关，语言切换不重置播放状态 |
 | 2026-07-12 | 视觉稿之后再决定页面是否能真正展开 | P6 已实现 Attention、MoE 和 TP 的同页连续展开，不使用图片轮播 | 用户明确要求像参考项目一样点击流程查看动态细节 | 已确认 | 共享播放状态同时驱动章节、进度与 Focus Scene |
+| 2026-07-12 | 7 个底层 UT 加人工浏览器检查即可证明 P6 可用 | 用户复验发现多个功能不可用；补充真实页面点击测试、场景模型和严格浏览器断言 | 原验收缺少页面级红灯能力，且部分数据为页面硬编码 | 已修复，待用户复验 | 测试增至 17 条；完整记录见 `docs/reports/2026-07-12-p6-interaction-regression.md` |
+| 2026-07-13 | 详情区域进入 DOM、进度条推进即可视为动态交互完成 | 用户复验指出正文无动画且点击无可见变化；改为播放驱动正文、自动镜头、真实 hit-test 和 viewport 断言 | 原实现的动画在页面加载时独立运行，播放状态未驱动镜头；无效 `fr` 计算把详情排到视口外 | 已修复，待用户复验 | 测试增至 19 条；完整记录见 `docs/reports/2026-07-13-p6-dynamic-playback-regression.md` |
+| 2026-07-13 | 使用 `MEMORY.md` 即可在压缩后恢复方向，P6 功能修复后可等待进入 P7 | 用户指出实现仍脱离早先视觉稿与初衷；建立完整对话/方案/视觉/状态/恢复档案，并重新打开 P6 产品 Gate | memory 偏重事实清单，没有保存视觉选择原因、失败验收和强制重读顺序 | 已确认问题，档案待验收 | 新增 `docs/project-context/` 与根 `AGENTS.md`；下一步先视觉差异审计，不进入 P7 |
+| 2026-07-13 | 完成上下文档案后直接整体重写 P6 | 先做带真实浏览器截图的差异审计，再拆成三个可验收实现切片 | 现有页面并非全部失效，必须区分可保留的数据/行为与需要重做的视觉骨架 | 审计待用户验收 | 审计确认首屏、初始化、Focus Scene、TP/Decode 和播放控件的结构性缺口 |
+| 2026-07-13 | 三个纠偏切片按审计清单直接实现 | 浏览器验收额外修复 Decode 决策错位、Focus Scene 被章节栏遮挡，以及关闭中快速重开竞态 | 自动化通过后仍用真实操作与参考稿同屏对照发现了语义/构图/过渡问题 | 自动化与浏览器已通过，待用户验收 | 29 tests、静态构建、1280px/390px 截图和同屏对照已固化 |
+| 2026-07-13 | 桌面通过即可申请验收，移动端只在 P7 再看 | 在不扩大产品范围的 readiness 审计中修复 390px 摘要布局、Evidence dialog、中文说明和 URL 语言优先级 | 桌面 min-width 会把三个展开入口推出移动视口；旧语言偏好会覆盖显式 URL | 已修复并回归，用户 Gate 仍打开 | 证据见 `docs/audits/2026-07-13-p7-readiness/` |
+| 2026-07-13 | 40 层 30/10 类型图即可证明 Linear/Full Attention 都已实现 | 完成性审计确认只有 Full Attention 有可展开内部过程，因此补齐 p4r4 Layer 0 Gated DeltaNet 六阶段 Focus | “实现代表层”需要页面级可见/可点证据，不能只靠类型计数和文档勾选 | 已修复并回归，用户 Gate 仍打开 | 真实输入/输出的受控样本与统计为 Summary；内部源码路径为 Structural/Schematic；证据见 `docs/audits/2026-07-13-p8-completion/` |
+| 2026-07-13 | 一个 `chapter` 同时代表可视页面和推理步骤 | 分离 `viewChapter`、推理 cursor 与 `progressByChapter`，加入 3 种起点 × 2 种模式 | 用户复验发现仅切换页面会把旧页补到完成，并要求页面/步骤独立 | 已实现并回归，待用户验收 | 7 files / 41 tests；真实浏览器证明 Prefill `0.234` 浏览后不变、单步语义正确、滚动自动暂停；见 ADR-0006 与 P6.5 报告 |
+| 2026-07-13 | 人工滚动立即暂停连续播放 | 人工滚动/触控/章节浏览只关闭 camera follow，transport 与正文动画继续 | 用户最新明确要求运行过程中可以滑动且不暂停 | 已实现并回归，待用户验收 | 7 files / 43 tests；真实浏览器 `scrollY 1040 → 1760` 时 progress `0.087 → 0.138`；见 ADR-0007 与 P6.6 报告 |
+| 2026-07-13 | Decode 使用独立深色终章 | 改为与前文一致的浅色章节、暖白数据卡和共享状态色 | 用户指出最后一页为黑色，与前面风格不一致 | 已实现并回归，待用户验收 | 7 files / 44 tests；新构建旧深色背景残留为 0；见 P6.7 报告 |
+| 2026-07-13 | 所有章节统一使用 `145vh + sticky` | Initialize/Tokenize 改为自然高度并随文档等量移动 | 用户指出第二、第三章滚动后页面变长但画面不动；真实浏览器确认短场景被固定在 92px | 已实现并回归，待用户验收 | 7 files / 45 tests；两章 `scrollDelta 260 / visualDelta -260`；见 P6.8 报告 |
+| 2026-07-13 | P6.8 只取消 Initialize/Tokenize 的 sticky | 将自然文档流推广到全部正文章节 | 用户确认其他章节也有同类问题并要求一并快速修复 | 已实现并回归，待用户验收 | Attention/TP/Decode 均为 `scrollDelta 180 / visualDelta -180`；见 ADR-0008 与 P6.9 报告 |
 
 ## 10. 阶段完成记录
 
@@ -170,5 +191,5 @@
 | P4.1 融合/并行补采 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r3`、`docs/reports/2026-07-10-p4.1-quantization-and-tp-trace.md` | 1722 事件、量化 scale 与 50 个 TP span 齐全、错误 0 |
 | P4.2 Attention 重建 | 已完成 | `data/web/qwen35-a3b-w8a8-20260710-p4r4/attention-derived.json`、`docs/reports/2026-07-10-p4.2-derived-attention.md` | 16 heads、causal softmax 与融合输出相似度校验通过、错误 0 |
 | P5 架构/视觉冻结 | 已完成 | `docs/ARCHITECTURE.md`、`docs/INTERACTION_DESIGN.md`、`docs/assets/p5-fused-long-scroll-direction.png` | 技术与融合视觉方向已验收并进入实现 |
-| P6 网站 MVP | 已完成 | `web/`、`design-qa.md` | 7 个单测、类型检查、静态构建与内置浏览器关键交互均通过，等待用户验收 |
-| P7 QA/发布 | 未开始 | - | - |
+| P6 网站 MVP | 三个纠偏切片、P6.5 页面/游标解耦、P6.6 滚动不中断、P6.7 Decode 浅色一致性、P6.8/P6.9 全章节连续滚动、自动化、桌面/390px 浏览器和设计 QA 已通过；待用户产品/视觉验收 | `web/`、`design-qa.md`、`docs/audits/2026-07-13-p6-rebuild/`、`docs/audits/2026-07-13-p7-readiness/`、`docs/audits/2026-07-13-p8-completion/`、`docs/reports/2026-07-13-p6.9-all-chapter-scroll-regression.md` | 页面已达到再次申请验收状态；用户接受前不进入 P7 正式交付 |
+| P7 QA/发布 | 正式交付未开始；已完成不扩大范围的 readiness 补强 | `docs/audits/2026-07-13-p7-readiness/` | 用户接受 P6 后再进入完整设备/性能/许可/部署检查 |
